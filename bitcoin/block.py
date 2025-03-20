@@ -1,3 +1,7 @@
+""" 
+This module defines the structure and methods required
+for a PoW blockchain block.
+"""
 import hashlib
 import datetime
 import json
@@ -6,6 +10,10 @@ from dataclasses import asdict, dataclass
 
 @dataclass
 class BlockHeader:
+    """
+    Block header dataclass.
+    """
+
     version: int
     hash_parent: str
     hash_merkle: str
