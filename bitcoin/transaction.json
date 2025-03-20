@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "inputs": [
+    {
+      "txid": 1,
+      "oid": 0,
+      "pubkey": "mypublickey", 
+      "signature": "mysignature"
+    }
+  ],
+  "outputs": [
+    {
+      "amount": 10,
+      "pubkey": "mypubkey-hash"
+    }
+  ]
+}
