@@ -1,7 +1,5 @@
-import hashlib
 from block import PoWBlock
 from dataclasses import dataclass
-from cryptography.exceptions import InvalidSignature
 from crypto import load_pubkey, load_signature, hash_pubkey, verify
 
 
