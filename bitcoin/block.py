@@ -1,7 +1,8 @@
-""" 
+"""
 This module defines the structure and methods required
 for a PoW blockchain block.
 """
+
 import hashlib
 import datetime
 import json
@@ -39,7 +40,7 @@ class PoWBlock:
     """
 
     header: BlockHeader
-    transactions: list[dict]
+    transactions: dict[dict]
 
     def __init__(
         self,
@@ -63,40 +64,18 @@ class PoWBlock:
             self.header = BlockHeader(
                 version=1,
                 hash_parent=parent,
-                hash_merkle="",
+                hash_merkle=PoWBlock.merkle_root(transactions),
                 time=int(datetime.datetime.now().timestamp()),
                 target=target,
                 nonce=0,
             )
+            self.transactions = {
+                hashlib.sha256(json.dumps(t).encode()).hexdigest(): t
+                for t in transactions
+            }
         else:
             self.header = BlockHeader(**header)
-        self.tr = transactions
-        self.header.hash_merkle = self.merkle_root()
-
-    def merkle_root(self) -> str:
-        """
-        Computes the merkle root hash for the set of transactions in the
-        block.
-
-        Returns:
-            str: Double SHA256 hash value at the root of the tree.
-        """
-
-        # Handle non-balanced trees without altering the original transactions
-        trs = self.tr[:] + [self.tr[-1]] if len(self.tr) % 2 else self.tr[:]
-
-        # Compute and concatenate hash pairs
-        hashlist: list[str] = [
-            hashlib.sha256(json.dumps(t).encode()).digest() for t in trs
-        ]
-
-        while len(hashlist) > 1:
-            hashlist = [
-                hashlib.sha256(hashlist[i] + hashlist[i + 1]).digest()
-                for i in range(0, len(hashlist), 2)
-            ]
-
-        return hashlib.sha256(hashlist[0]).hexdigest()
+            self.transactions = transactions
 
     @property
     def hash(self) -> str:
@@ -111,6 +90,38 @@ class PoWBlock:
         ).hexdigest()
 
     @classmethod
+    def merkle_root(cls, transactions) -> str:
+        """
+        Computes the merkle root hash for the set of transactions in the
+        block.
+
+        Returns:
+            str: Double SHA256 hash value at the root of the tree.
+        """
+
+        # Handle non-balanced trees without altering the original transactions
+        trs = (
+            transactions[:]
+            if isinstance(transactions, list)
+            else list(transactions.values())
+        )
+
+        trs = trs + [trs[-1]] if len(trs) % 2 else trs
+
+        # Compute and concatenate hash pairs
+        hashlist: list[str] = [
+            hashlib.sha256(json.dumps(t).encode()).digest() for t in trs
+        ]
+
+        while len(hashlist) > 1:
+            hashlist = [
+                hashlib.sha256(hashlist[i] + hashlist[i + 1]).digest()
+                for i in range(0, len(hashlist), 2)
+            ]
+
+        return hashlib.sha256(hashlist[0]).hexdigest()
+
+    @classmethod
     def dumps(cls, block: "PoWBlock") -> str:
         """
         Creates a json representation of a block.
@@ -121,7 +132,7 @@ class PoWBlock:
         Returns:
             str: json-string with block information.
         """
-        return json.dumps({**asdict(block.header), "transactions": [*block.tr]})
+        return json.dumps({**asdict(block.header), "transactions": block.transactions})
 
     @classmethod
     def loads(cls, data: str) -> "PoWBlock":

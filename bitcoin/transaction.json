@@ -1,17 +1,23 @@
 {
-  "version": 1,
-  "inputs": [
-    {
-      "txid": 1,
-      "oid": 0,
-      "pubkey": "mypublickey", 
-      "signature": "mysignature"
-    }
-  ],
-  "outputs": [
-    {
-      "amount": 10,
-      "pubkey": "mypubkey-hash"
-    }
-  ]
+  "transaction-id-1": {
+    "version": 1,
+    "inputs": [
+      {
+        "tx_id": 1,
+        "v_out": 0,
+        "key": "mypublickey",
+        "signature": "mysignature"
+      }
+    ],
+    "outputs": [
+      {
+        "amount": 10,
+        "keyhash": "pubkey-hash"
+      },
+      {
+        "data": "some-bytes",
+        "keyhash": "pubkey-hash"
+      }
+    ]
+  }
 }
