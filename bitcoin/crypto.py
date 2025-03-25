@@ -1,8 +1,19 @@
+"""
+Wrapper module for repeated cryptography operations
+"""
 import hashlib
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
+import json
 
+def create_keypair():
+    priv = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=2048,
+        )
+    pub = priv.public_key()
+    return priv, pub
 
 def hash_pubkey(pub: rsa.RSAPublicKey):
     key_bytes = pub.public_bytes(
@@ -53,3 +64,6 @@ def verify(pub: rsa.RSAPublicKey, signature: bytes, data: str):
         return True
     except Exception:
         return False
+    
+def hash_transaction(t: dict):
+    return hashlib.sha256(json.dumps(t).encode()).hexdigest()

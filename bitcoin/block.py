@@ -1,13 +1,13 @@
 """
-This module defines the structure and methods required
-for a PoW blockchain block.
+This module defines the structure and methods required for a PoW blockchain
+block.
 """
 
 import hashlib
 import datetime
 import json
 from dataclasses import asdict, dataclass
-
+from crypto import hash_transaction
 
 @dataclass
 class BlockHeader:
@@ -70,7 +70,7 @@ class PoWBlock:
                 nonce=0,
             )
             self.transactions = {
-                hashlib.sha256(json.dumps(t).encode()).hexdigest(): t
+                hash_transaction(t): t
                 for t in transactions
             }
         else:
@@ -88,6 +88,12 @@ class PoWBlock:
         return hashlib.sha256(
             hashlib.sha256(repr(self.header).encode()).digest()
         ).hexdigest()
+
+    @property
+    def target_value(self) -> int:
+        return int(self.header.target[2:], base=16) * (
+            256 ** (self.header.target[0:2] - 3)
+        )
 
     @classmethod
     def merkle_root(cls, transactions) -> str:
