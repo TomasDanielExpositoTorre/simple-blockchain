@@ -29,7 +29,7 @@ class UTXO:
     block_id: int
 
 
-@dataclass(order=True)
+@dataclass
 class Transaction:
     """
     Dataclass representation of a transaction that has been validated by
@@ -52,7 +52,6 @@ class Transaction:
 
         """
         return self.fee > other.fee
-
 
 class PoWNode:
     """
