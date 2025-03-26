@@ -136,26 +136,26 @@ class PoWNode:
 
         # Validate block header values
         if block.header.hash_parent != self.last_hash:
-            logging.error("Block parent hash is incorrect")
+            logging.debug("Block parent hash is incorrect")
             return False
 
         if block.header.target != message["difficulty"]:
-            logging.error("Block difficulty value is incorrect")
+            logging.debug("Block difficulty value is incorrect")
             return False
 
         # Validate obtained hash
         if block.target_value < int(block.hash, 16):
-            logging.error("Block target was not reached")
+            logging.debug("Block target was not reached")
             return False
 
         # Validate individual transactions
         for txid, t in block.transactions.items():
             if hash_transaction(t) != txid:
-                logging.error("Transaction was tampered")
+                logging.debug("Transaction was tampered")
                 return False
 
             if t.get("coinbase") and fee != 0:
-                logging.error("More than one coinbase transaction present in the block")
+                logging.debug("More than one coinbase transaction present in the block")
                 return False
             elif t.get("coinbase"):
                 fee = t["outputs"][0]["amount"]
@@ -167,7 +167,7 @@ class PoWNode:
             total += amount
 
         if fee != (total + PoWNode.reward):
-            logging.error("Reward value is incorrect")
+            logging.debug("Reward value is incorrect")
             return False
 
         # Add mined block to the chain after consensus has been reached
@@ -224,9 +224,10 @@ class PoWNode:
         """
         total = 0
         data = []
+        inpairs = []
 
         if transaction["version"] != 1:
-            logging.error("Wrong transaction version")
+            logging.debug("Wrong transaction version")
             return False
 
         for i in transaction["inputs"]:
@@ -234,11 +235,17 @@ class PoWNode:
             # Extract data from the input
             txid, out = i["tx_id"], i["v_out"]
             pub, sig = load_pubkey(i["key"]), load_signature(i["signature"])
+            outpoint = f"{txid}:{out}"
 
             # Look up output in unspent set
+            if outpoint in inpairs:
+                logging.debug(f"The outpoint {outpoint} was spent twice")
+                return False
+            inpairs.append(outpoint)
+
             utxo = self.utxo_set.get(txid, None)
             if not utxo or out not in utxo.v_outs:
-                logging.error(f"The outpoint {txid}:{out} is invalid")
+                logging.debug(f"The outpoint {outpoint} is invalid")
                 return False
 
             tx: dict = self.blockchain[utxo.block_id].transactions[txid]["outputs"][out]
@@ -246,13 +253,9 @@ class PoWNode:
             # Compare public keys
             keyhash = hash_pubkey(pub)
             if keyhash != tx["keyhash"]:
-                logging.error(f"Invalid public key for outpoint {txid}:{out}")
+                logging.debug(f"Invalid public key for outpoint {outpoint}")
                 return False
 
-            # Compare signature for ownership
-            if not verify(pub=pub, signature=sig, data=d):
-                logging.error(f"Invalid ownership for outpoint {txid}:{out}")
-                return False
 
             # Append remainder to total fee
             if amount := tx.get("amount"):
@@ -262,16 +265,21 @@ class PoWNode:
                 data.append(tx["data"])
                 d = tx["data"]
 
+            # Compare signature for ownership
+            if not verify(pub=pub, signature=sig, data=d):
+                logging.debug(f"Invalid ownership for outpoint {outpoint}")
+                return False
+
         # Check resulting fee and data ownership transfer
         total -= sum([t.get("amount", 0) for t in transaction["outputs"]])
         outs = [t["data"] for t in transaction["outputs"] if t.get("data")]
 
         if total < 0:
-            logging.error(f"Invalid transaction fee: {total}")
+            logging.debug(f"Invalid transaction fee: {total}")
             return False
 
         if len(set(data) - set(outs)) > 0:
-            logging.error(f"Invalid transaction, some data is not being transfered")
+            logging.debug(f"Invalid transaction, some data is not being transfered")
             return False
 
         return total

@@ -92,7 +92,7 @@ class PoWNodeTest(unittest.TestCase):
                 "version": 1,
                 "inputs": [
                     {
-                        "tx_id": 1,
+                        "tx_id": "1",
                         "v_out": 0,
                         "key": "mypublickey",
                         "signature": "mysignature",
@@ -109,24 +109,21 @@ class PoWNodeTest(unittest.TestCase):
             parent="This is a test!",
             target="This is still a test!",
         )
+        cls.txid = list(cls.block.transactions.keys())[0]
+        cls.node = PoWNode(pub=cls.pub, priv=cls.priv)
 
-        (cls.transactions)
+        cls.node.blockchain = [cls.block]
+        cls.node.utxo_set = {cls.txid: UTXO(v_outs=[0, 1], block_id=0)}
+        cls.node.transactions = []
 
     def test01_valid_transaction(self):
-        """Test 01: Transaction with valid input owner and acceptable amount"""
-        txid = list(self.block.transactions.keys())[0]
-        node = PoWNode(
-            blockchain=[self.block],
-            utxo={txid: UTXO(v_outs=[0, 1], block_id=0)},
-            transactions=[],
-        )
-
-        fee, is_valid = node.validate_transaction(
+        """Test 1: Transaction with valid input owner and acceptable amount"""
+        fee = self.node.validate_transaction(
             {
                 "version": 1,
                 "inputs": [
                     {
-                        "tx_id": txid,
+                        "tx_id": self.txid,
                         "v_out": 0,
                         "key": dump_pubkey(self.pub),
                         "signature": sign(self.priv, str(10000)),
@@ -144,8 +141,89 @@ class PoWNodeTest(unittest.TestCase):
                 ],
             }
         )
+        self.assertNotEqual(fee, False)
         self.assertEqual(fee, 1)
-        self.assertTrue(is_valid)
+
+    def test02_invalid_outpoint(self):
+        """Test 2: Transaction with invalid outpoint field"""
+        self.assertFalse(self.node.validate_transaction(
+            {
+                "version": 1,
+                "inputs": [
+                    {
+                        "tx_id": "potato",
+                        "v_out": 0,
+                        "key": dump_pubkey(self.pub),
+                        "signature": sign(self.priv, str(10000)),
+                    },
+                ],
+                "outputs": [
+                    {
+                        "amount": 1000,
+                        "keyhash": hash_pubkey(self.pub),
+                    },
+                    {
+                        "amount": 8999,
+                        "keyhash": hash_pubkey(self.pub),
+                    },
+                ],
+            }
+        ))
+        self.assertFalse(self.node.validate_transaction(
+            {
+                "version": 1,
+                "inputs": [
+                    {
+                        "tx_id": self.txid,
+                        "v_out": "invalid",
+                        "key": dump_pubkey(self.pub),
+                        "signature": sign(self.priv, str(10000)),
+                    },
+                ],
+                "outputs": [
+                    {
+                        "amount": 1000,
+                        "keyhash": hash_pubkey(self.pub),
+                    },
+                    {
+                        "amount": 8999,
+                        "keyhash": hash_pubkey(self.pub),
+                    },
+                ],
+            }
+        ))
+
+    def test03_double_spending(self):
+        """Test 3: Transaction with repeated input field"""
+        self.assertFalse(self.node.validate_transaction(
+            {
+                "version": 1,
+                "inputs": [
+                    {
+                        "tx_id": self.txid,
+                        "v_out": 0,
+                        "key": dump_pubkey(self.pub),
+                        "signature": sign(self.priv, str(10000)),
+                    },
+                    {
+                        "tx_id": self.txid,
+                        "v_out": 0,
+                        "key": dump_pubkey(self.pub),
+                        "signature": sign(self.priv, str(10000)),
+                    },
+                ],
+                "outputs": [
+                    {
+                        "amount": 1000,
+                        "keyhash": hash_pubkey(self.pub),
+                    },
+                    {
+                        "amount": 8999,
+                        "keyhash": hash_pubkey(self.pub),
+                    },
+                ],
+            }
+        ))
 
 
 if __name__ == "__main__":
