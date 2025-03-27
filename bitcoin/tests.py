@@ -2,7 +2,7 @@ import unittest
 from block import PoWBlock
 from node import PoWNode, UTXO
 from cryptography.hazmat.primitives.asymmetric import rsa
-from crypto import hash_pubkey, sign, dump_pubkey
+from crypto import hash_pubkey, sign, dump_pubkey, create_keypair
 
 
 class PoWBlockTestCase(unittest.TestCase):
@@ -81,11 +81,8 @@ class PoWBlockTestCase(unittest.TestCase):
 class PoWNodeTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.priv = rsa.generate_private_key(
-            public_exponent=65537,
-            key_size=2048,
-        )
-        cls.pub = cls.priv.public_key()
+        cls.priv, cls.pub = create_keypair()
+        cls.otherpriv, cls.otherpub = create_keypair()
 
         cls.transactions = [
             {
@@ -116,7 +113,7 @@ class PoWNodeTest(unittest.TestCase):
         cls.node.utxo_set = {cls.txid: UTXO(v_outs=[0, 1], block_id=0)}
         cls.node.transactions = []
 
-    def test01_valid_transaction(self):
+    def test01_coin_transfer(self):
         """Test 1: Transaction with valid input owner and acceptable amount"""
         fee = self.node.validate_transaction(
             {
@@ -132,7 +129,7 @@ class PoWNodeTest(unittest.TestCase):
                 "outputs": [
                     {
                         "amount": 1000,
-                        "keyhash": hash_pubkey(self.pub),
+                        "keyhash": hash_pubkey(self.otherpub),
                     },
                     {
                         "amount": 8999,
@@ -144,86 +141,248 @@ class PoWNodeTest(unittest.TestCase):
         self.assertNotEqual(fee, False)
         self.assertEqual(fee, 1)
 
-    def test02_invalid_outpoint(self):
-        """Test 2: Transaction with invalid outpoint field"""
-        self.assertFalse(self.node.validate_transaction(
-            {
-                "version": 1,
-                "inputs": [
-                    {
-                        "tx_id": "potato",
-                        "v_out": 0,
-                        "key": dump_pubkey(self.pub),
-                        "signature": sign(self.priv, str(10000)),
-                    },
-                ],
-                "outputs": [
-                    {
-                        "amount": 1000,
-                        "keyhash": hash_pubkey(self.pub),
-                    },
-                    {
-                        "amount": 8999,
-                        "keyhash": hash_pubkey(self.pub),
-                    },
-                ],
-            }
-        ))
-        self.assertFalse(self.node.validate_transaction(
-            {
-                "version": 1,
-                "inputs": [
-                    {
-                        "tx_id": self.txid,
-                        "v_out": "invalid",
-                        "key": dump_pubkey(self.pub),
-                        "signature": sign(self.priv, str(10000)),
-                    },
-                ],
-                "outputs": [
-                    {
-                        "amount": 1000,
-                        "keyhash": hash_pubkey(self.pub),
-                    },
-                    {
-                        "amount": 8999,
-                        "keyhash": hash_pubkey(self.pub),
-                    },
-                ],
-            }
-        ))
+    def test02_data_transfer(self):
+        """Test 7: Transaction where input data is permanently lost"""
+        self.assertFalse(
+            self.node.validate_transaction(
+                {
+                    "version": 1,
+                    "inputs": [
+                        {
+                            "tx_id": self.txid,
+                            "v_out": 1,
+                            "key": dump_pubkey(self.pub),
+                            "signature": sign(self.priv, "some-bytes"),
+                        },
+                    ],
+                    "outputs": [
+                        {
+                            "data": "some-bytes",
+                            "keyhash": hash_pubkey(self.otherpub),
+                        },
+                        {
+                            "data": "some-more-bytes",
+                            "keyhash": hash_pubkey(self.pub),
+                        },
+                    ],
+                }
+            )
+        )
 
-    def test03_double_spending(self):
+    def test03_invalid_outpoint(self):
+        """Test 2: Transaction with invalid outpoint field"""
+        self.assertFalse(
+            self.node.validate_transaction(
+                {
+                    "version": 1,
+                    "inputs": [
+                        {
+                            "tx_id": "potato",
+                            "v_out": 0,
+                            "key": dump_pubkey(self.pub),
+                            "signature": sign(self.priv, str(10000)),
+                        },
+                    ],
+                    "outputs": [
+                        {
+                            "amount": 1000,
+                            "keyhash": hash_pubkey(self.pub),
+                        },
+                        {
+                            "amount": 8999,
+                            "keyhash": hash_pubkey(self.pub),
+                        },
+                    ],
+                }
+            )
+        )
+        self.assertFalse(
+            self.node.validate_transaction(
+                {
+                    "version": 1,
+                    "inputs": [
+                        {
+                            "tx_id": self.txid,
+                            "v_out": "invalid",
+                            "key": dump_pubkey(self.pub),
+                            "signature": sign(self.priv, str(10000)),
+                        },
+                    ],
+                    "outputs": [
+                        {
+                            "amount": 1000,
+                            "keyhash": hash_pubkey(self.pub),
+                        },
+                        {
+                            "amount": 8999,
+                            "keyhash": hash_pubkey(self.pub),
+                        },
+                    ],
+                }
+            )
+        )
+
+    def test04_double_spending(self):
         """Test 3: Transaction with repeated input field"""
-        self.assertFalse(self.node.validate_transaction(
-            {
-                "version": 1,
-                "inputs": [
-                    {
-                        "tx_id": self.txid,
-                        "v_out": 0,
-                        "key": dump_pubkey(self.pub),
-                        "signature": sign(self.priv, str(10000)),
-                    },
-                    {
-                        "tx_id": self.txid,
-                        "v_out": 0,
-                        "key": dump_pubkey(self.pub),
-                        "signature": sign(self.priv, str(10000)),
-                    },
-                ],
-                "outputs": [
-                    {
-                        "amount": 1000,
-                        "keyhash": hash_pubkey(self.pub),
-                    },
-                    {
-                        "amount": 8999,
-                        "keyhash": hash_pubkey(self.pub),
-                    },
-                ],
-            }
-        ))
+        self.assertFalse(
+            self.node.validate_transaction(
+                {
+                    "version": 1,
+                    "inputs": [
+                        {
+                            "tx_id": self.txid,
+                            "v_out": 0,
+                            "key": dump_pubkey(self.pub),
+                            "signature": sign(self.priv, str(10000)),
+                        },
+                        {
+                            "tx_id": self.txid,
+                            "v_out": 0,
+                            "key": dump_pubkey(self.pub),
+                            "signature": sign(self.priv, str(10000)),
+                        },
+                    ],
+                    "outputs": [
+                        {
+                            "amount": 1000,
+                            "keyhash": hash_pubkey(self.pub),
+                        },
+                        {
+                            "amount": 8999,
+                            "keyhash": hash_pubkey(self.pub),
+                        },
+                    ],
+                }
+            )
+        )
+
+    def test05_invalid_pubkey(self):
+        """Test 4: Transaction with invalid public key hash"""
+        self.assertFalse(
+            self.node.validate_transaction(
+                {
+                    "version": 1,
+                    "inputs": [
+                        {
+                            "tx_id": self.txid,
+                            "v_out": 0,
+                            "key": dump_pubkey(self.otherpub),
+                            "signature": sign(self.priv, str(10000)),
+                        },
+                    ],
+                    "outputs": [
+                        {
+                            "amount": 1000,
+                            "keyhash": hash_pubkey(self.pub),
+                        },
+                        {
+                            "amount": 8999,
+                            "keyhash": hash_pubkey(self.pub),
+                        },
+                    ],
+                }
+            )
+        )
+
+    def test06_invalid_sign(self):
+        """Test 5: Transaction with valid public key but invalid signature"""
+        self.assertFalse(
+            self.node.validate_transaction(
+                {
+                    "version": 1,
+                    "inputs": [
+                        {
+                            "tx_id": self.txid,
+                            "v_out": 0,
+                            "key": dump_pubkey(self.pub),
+                            "signature": sign(self.otherpriv, str(10000)),
+                        },
+                    ],
+                    "outputs": [
+                        {
+                            "amount": 1000,
+                            "keyhash": hash_pubkey(self.pub),
+                        },
+                        {
+                            "amount": 8999,
+                            "keyhash": hash_pubkey(self.pub),
+                        },
+                    ],
+                }
+            )
+        )
+        self.assertFalse(
+            self.node.validate_transaction(
+                {
+                    "version": 1,
+                    "inputs": [
+                        {
+                            "tx_id": self.txid,
+                            "v_out": 0,
+                            "key": dump_pubkey(self.pub),
+                            "signature": sign(self.priv, str(10001)),
+                        },
+                    ],
+                    "outputs": [
+                        {
+                            "amount": 1000,
+                            "keyhash": hash_pubkey(self.pub),
+                        },
+                        {
+                            "amount": 8999,
+                            "keyhash": hash_pubkey(self.pub),
+                        },
+                    ],
+                }
+            )
+        )
+
+    def test07_invalid_amount(self):
+        """Test 6: Transaction with non-matching input/output amounts"""
+        self.assertFalse(
+            self.node.validate_transaction(
+                {
+                    "version": 1,
+                    "inputs": [
+                        {
+                            "tx_id": self.txid,
+                            "v_out": 0,
+                            "key": dump_pubkey(self.pub),
+                            "signature": sign(self.priv, str(10000)),
+                        },
+                    ],
+                    "outputs": [
+                        {
+                            "amount": 1000,
+                            "keyhash": hash_pubkey(self.pub),
+                        },
+                        {
+                            "amount": 9001,
+                            "keyhash": hash_pubkey(self.pub),
+                        },
+                    ],
+                }
+            )
+        )
+
+    def test08_data_loss(self):
+        """Test 7: Transaction where input data is permanently lost"""
+        self.assertFalse(
+            self.node.validate_transaction(
+                {
+                    "version": 1,
+                    "inputs": [
+                        {
+                            "tx_id": self.txid,
+                            "v_out": 1,
+                            "key": dump_pubkey(self.pub),
+                            "signature": sign(self.priv, "some-bytes"),
+                        },
+                    ],
+                    "outputs": [],
+                }
+            )
+        )
 
 
 if __name__ == "__main__":
