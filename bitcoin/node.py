@@ -5,7 +5,14 @@ node.
 
 from block import PoWBlock
 from dataclasses import dataclass
-from crypto import load_pubkey, load_signature, hash_pubkey, verify, hash_transaction, create_keypair
+from crypto import (
+    load_pubkey,
+    load_signature,
+    hash_pubkey,
+    verify,
+    hash_transaction,
+    create_keypair,
+)
 import logging
 import threading
 import socket
@@ -105,7 +112,6 @@ class PoWNode:
         self.lock.release()
         return sol
 
-    @property
     def set_solution(self, value):
         """
         Thread-safe wrapper to set if a solution has been found in the chain
@@ -128,30 +134,36 @@ class PoWNode:
                 # Obtain data from master
                 data = self.conn.recv(self.bufsize)
                 message = json.loads(data.decode())
-                print(type(message))
+
                 match message.get("type"):
                     # Add a transaction to the chain (blocking)
                     case "transaction":
-                        self.add_transaction(transaction=json.loads(message["transaction"]))
+                        self.add_transaction(
+                            transaction=json.loads(message["transaction"])
+                        )
 
                     # Mine current transactions (non-blocking)
-                    case "mine":  
+                    case "mine":
                         self.mining_signal.clear()
-                        print(message)
-                        threading.Thread(target=self.mine_block, args=(message["difficulty"],)).start()
+                        self.set_solution(False)
+                        threading.Thread(
+                            target=self.mine_block, args=(message["difficulty"],)
+                        ).start()
 
                     # Vote on solution (blocking)
                     case "verify":
                         self.set_solution(True)
-                        valid = self.validate_block(message=message["block"])
-                        self.conn.sendall(json.dumps({"type": "verify", "vote": 1 if valid else 0}))
-
+                        valid = self.validate_block(message=message)
+                        self.conn.sendall(
+                            json.dumps(
+                                {"type": "verify", "vote": 1 if valid else 0}
+                            ).encode()
+                        )
                     # Add voted block (blocking)
-                    case "veredict":  
-
+                    case "veredict":
                         # Append block and tell miner to stop
                         if message.get("block"):
-                            self._add_block(PoWBLock.loads(message.get("block").decode()))
+                            self._add_block(PoWBlock.loads(message.get("block")))
                             self.mining_signal.set()
 
                         # Consensus was not reached, continue mining
@@ -175,7 +187,6 @@ class PoWNode:
             difficulty (str): Target for the PoW operation
         """
         found = False
-
         # Compute the mining fee and add it as the coinbase transaction
         fee = sum([t.fee for t in self.transactions]) + PoWNode.reward
         self.transactions.append(
@@ -192,7 +203,6 @@ class PoWNode:
             transactions=self.transactions, parent=self.last_hash, target=difficulty
         )
         target = block.target_value
-        print(target)
 
         while True:
             # Halt mining when another node finds the solution
@@ -200,18 +210,22 @@ class PoWNode:
                 self.mining_signal.wait()
                 self.mining_signal.clear()
                 if self.get_solution:
-                    return
+                    self.transactions.pop(-1)
+                    exit()
 
             # Hashcash PoW
             if int(block.hash, base=16) <= target:
                 # Send found solution
                 self.conn.sendall(
-                    json.dumps({"type": "solution", "block": PoWBlock.dumps(block)}).encode()
+                    json.dumps(
+                        {"type": "solution", "block": PoWBlock.dumps(block)}
+                    ).encode()
                 )
-                return
-            
-            block.header.nonce += 1
+                self.transactions.pop(-1)
+                exit()
 
+            block.header.nonce += 1
+        
     def validate_block(self, message: str):
         """
         Validates a block received from other nodes and appends it to own
@@ -223,6 +237,7 @@ class PoWNode:
         """
 
         fee, total = 0, 0
+
         block = PoWBlock.loads(message["block"])
 
         # Validate block header values
@@ -339,7 +354,7 @@ class PoWNode:
                 logging.debug(f"Invalid ownership for outpoint {outpoint}")
                 return False
 
-        # Check resulting fee and data ownership transfer
+        # Check resulting fee and p ownership transfer
         total -= sum([t.get("amount", 0) for t in transaction["outputs"]])
         outs = [t["data"] for t in transaction["outputs"] if t.get("data")]
 
@@ -364,6 +379,9 @@ class PoWNode:
         hashes = {hash_transaction(t): i for i, t in enumerate(self.transactions)}
 
         for txid, t in block.transactions.items():
+            if t.get("coinbase"):
+                continue
+
             # Remove spent transactions from the utxo set
             utxo = self.utxo_set[txid]
             spent = [i["v_out"] for i in t["inputs"]]
@@ -372,6 +390,8 @@ class PoWNode:
             # Remove the transaction from the pool
             if txid in hashes:
                 self.transactions.pop(hashes[txid])
+
+
 
 priv, pub = create_keypair()
 node = PoWNode(pub, priv)

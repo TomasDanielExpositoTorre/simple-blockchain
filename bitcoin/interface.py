@@ -42,17 +42,18 @@ class MainNode:
         """
         Adaptive difficulty value depending on the number of nodes present in the chain
         """
-        diff = BASE_DIFFICULTY + math.floor(math.log(len(self.nodes) + 1, 4))
-        logging.debug(f"Difficulty updated to {diff} zeros.")
-        return "1EFFFFFF"
-        # return '0' + (hex(diff) + 'ffff')[2:] if len(hex(diff)) == 3 else (hex(diff) + 'ffffff')[2:] 
+        with self.lock:
+            diff = BASE_DIFFICULTY + math.floor(math.log(len(self.nodes) + 1, 4))
+            logging.debug(f"Difficulty updated to {diff} zeros.")
+            return "1EFFFFFF"
+            # return '0' + (hex(diff) + 'ffff')[2:] if len(hex(diff)) == 3 else (hex(diff) + 'ffffff')[2:] 
 
     @property
     def voting_finished(self) -> bool:
         """
         Checks if voting is currently finished.
         """
-        return len(self.consensus)+1 == len(self.nodes) or sum(
+        return len(self.consensus) == len(self.nodes) or sum(
             self.consensus
         ) >= 0.51 * len(self.nodes)
 
@@ -72,19 +73,20 @@ class MainNode:
 
                 with self.lock:
                     match message.get("type"):
-
+                        
                         # Handle received solutions when expecting to vote
                         case "solution":
-                            if self.idle.is_set():
-                                break
-                            self.solution_queue.append((message["block"], conn))
+                            if self.idle.is_set() or self.voting_started.is_set():
+                                continue
+
+                            self.solution_queue.append(message["block"])
                             self.voting_started.set()
 
                         # Handle received votes
                         case "verify":
                             if not self.voting_started.is_set():
-                                break
-
+                                continue
+                            
                             self.consensus.append(int(message["vote"]))
 
                             if self.voting_finished:
@@ -117,23 +119,20 @@ class MainNode:
                 self.nodes.append(conn)
             threading.Thread(target=self.handle_connection, args=(conn, addr)).start()
 
-    def send_to_all(self, message, exceptfor=None):
+    def send_to_all(self, message):
         """
         Sends a message to all connected nodes.
 
         Args:
             message: Message to send.
-            exceptfor: Node connection to ignore when sending the message. Defaults
-                to None.
         """
         with self.lock:
             for node in self.nodes:
-                if node != exceptfor:
-                    try:
-                        node.sendall(json.dumps(message).encode())
-                    except Exception as e:
-                        logging.error(f"Failed to send to node: {e}")
-                        self.node.remove(node)
+                try:
+                    node.sendall(json.dumps(message).encode())
+                except Exception as e:
+                    logging.error(f"Failed to send to node: {e}")
+                    self.node.remove(node)
 
     def run(self):
         """
@@ -144,6 +143,7 @@ class MainNode:
         server_thread = threading.Thread(target=self.connection_daemon)
         server_thread.daemon = True
         server_thread.start()
+        self.idle.set()
 
         print("Simple Blockchain Simulator")
         try:
@@ -161,27 +161,42 @@ class MainNode:
                         pass
                     case "mine":
                         # Set mining event and await for the first solution
-                        self.send_to_all({"type": "mine", "difficulty": self.difficulty})
+
+                        diff = self.difficulty
+                        
+                        self.send_to_all({"type": "mine", "difficulty": diff})
+                        self.idle.clear()
                         self.voting_started.wait()
 
                         with self.lock:
                             solution_queue = self.solution_queue
 
-                        for i, (solution, conn) in enumerate(solution_queue):
+                        for i, solution in enumerate(solution_queue):
                             # Send first received solution                            
-                            self.send_to_all({"type": "verify", "block": solution}, exceptfor=conn)
+                            self.send_to_all({"type": "verify", "block": solution, "difficulty": diff})
 
                             # Wait for voting to conclude
                             self.voting_over.wait()
+                            self.voting_over.clear()
 
                             # Handle consensus response
-                            with self.lock:
-                                if sum(self.consensus) >= 0.51 * len(self.nodes): # Block accepted
-                                    self.send_to_all({"type": "veredict", "block": solution})
-                                elif i + 1 == len(solution_queue): # Block rejected, continue mining
-                                    self.send_to_all({"type": "veredict", "final": True})
-                                else: # Block rejected, but solution queue is not empty
-                                    self.send_to_all({"type": "veredict", "consensus": False})
+                            if sum(self.consensus) >= 0.51 * len(self.nodes): # Block accepted
+                                self.send_to_all({"type": "veredict", "block": solution})
+                                with self.lock:
+                                    self.idle.set()
+                                    self.voting_started.clear()
+                                    self.solution_queue = []
+                            elif i + 1 == len(solution_queue): # Block rejected, continue mining
+                                self.send_to_all({"type": "veredict", "final": True})
+                                with self.lock:
+                                    self.idle.set()
+                                    self.voting_started.clear()
+                                    self.solution_queue = []
+                            else: # Block rejected, but solution queue is not empty
+                                self.send_to_all({"type": "veredict", "consensus": False})
+                            self.consensus = []
+
+
 
                     case "visualize":
                         pass
