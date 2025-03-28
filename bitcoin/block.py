@@ -92,7 +92,7 @@ class PoWBlock:
     @property
     def target_value(self) -> int:
         return int(self.header.target[2:], base=16) * (
-            256 ** (self.header.target[0:2] - 3)
+            256 ** (int(self.header.target[0:2], base=16) - 3)
         )
 
     @classmethod

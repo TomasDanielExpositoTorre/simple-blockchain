@@ -36,7 +36,6 @@ def dump_pubkey(pub: rsa.RSAPublicKey):
 def load_pubkey(pub: str) -> rsa.RSAPublicKey:
     return serialization.load_der_public_key(bytes.fromhex(pub))
 
-
 def load_signature(data: str):
     return bytes.fromhex(data)
 
