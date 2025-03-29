@@ -4,6 +4,7 @@ import hashlib
 import random
 import threading
 import logging
+import time
 
 # Configure logging
 logging.basicConfig(
@@ -21,6 +22,7 @@ class SlaveNode:
         self.master_port = master_port
         self.conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.stop_event = threading.Event()
+        self.pause_event = threading.Event()
         self.current_job = None
 
     def connect_to_master(self):
@@ -37,6 +39,10 @@ class SlaveNode:
         logging.debug(f"Received data: {data}")
         logging.debug(f"Calculating nonce with difficulty {difficulty}...")
         while not self.stop_event.is_set():
+            if self.pause_event.is_set():
+                time.sleep(0.1)
+                continue
+
             nonce = str(random.randint(0, 1000000000))
             data['nonce'] = nonce
             hash_str = hashlib.sha256(
@@ -79,10 +85,9 @@ class SlaveNode:
                     self.current_job.start()
 
                 elif message['type'] == 'verify':
-                    self.stop_event.set()
                     if self.current_job and self.current_job.is_alive():
                         logging.debug("Stopping current job for verification.")
-                        self.current_job.join()
+                        self.pause_event.set()
                     
                     logging.debug(f"Verify data: {message['data']}, difficulty: {message['difficulty']}.")
                     hash_str = hashlib.sha256(
@@ -98,7 +103,9 @@ class SlaveNode:
                         self.conn.sendall(json.dumps(response).encode())
                     except Exception as e:
                         logging.error(f"Failed to send verification: {e}")
-
+                    
+                    # if the job was working, we need continue the job
+                    self.pause_event.clear()
                 elif message['type'] == 'close_connection':
                     logging.debug("Received close connection command from master.")
                     self.stop_event.set()
