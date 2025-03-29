@@ -9,6 +9,7 @@ import json
 from dataclasses import asdict, dataclass
 from crypto import hash_transaction
 
+
 @dataclass
 class BlockHeader:
     """
@@ -69,10 +70,7 @@ class PoWBlock:
                 target=target,
                 nonce=0,
             )
-            self.transactions = {
-                hash_transaction(t): t
-                for t in transactions
-            }
+            self.transactions = {hash_transaction(t): t for t in transactions}
         else:
             self.header = BlockHeader(**header)
             self.transactions = transactions

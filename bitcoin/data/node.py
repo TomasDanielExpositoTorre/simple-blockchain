@@ -3,6 +3,7 @@ This module defines the structure and methods required for a PoW blockchain
 node.
 """
 
+from blockchain import Blockchain
 from block import PoWBlock
 from dataclasses import dataclass
 from crypto import (
@@ -28,19 +29,6 @@ logging.basicConfig(
 )
 
 
-GENESIS_HASH = "0000000000000000000000000000000000000000000000000000000000000000"
-
-
-@dataclass
-class UTXO:
-    """
-    Dataclass representation for the set of "unspent" out transactions in
-    the blockchain. Entries should be added or removed only after a block
-    is added in the blockchain.
-    """
-
-    v_outs: list[int]
-    block_id: int
 
 
 @dataclass
@@ -67,16 +55,14 @@ class Transaction:
         """
         return self.fee > other.fee
 
-
 class PoWNode:
     """
     Class representing a node in the blockchain, which can both apply the
     proof-of-work operation and validate mined blocks.
     """
 
-    blockchain: list[PoWBlock] = []
-    utxo_set: dict[str, UTXO] = {}
-    transactions: list[Transaction] = []
+    blockchain = Blockchain(blocks=[], utxo_set={})
+    pool: list[Transaction] = []
     reward: float = 3.125
 
     def __init__(self, pub, priv):
@@ -103,13 +89,6 @@ class PoWNode:
     # -                     PROPERTIES, GETTERS & SETTERS                    -#
     ###########################################################################
 
-    @property
-    def last_hash(self) -> str:
-        """
-        Returns the hash of the last block in the chain
-        """
-        return self.blockchain[-1].hash if len(self.blockchain) else GENESIS_HASH
-
     def get_solution(self) -> bool:
         """
         Thread-safe wrapper to check if a solution has been found in the chain
@@ -127,110 +106,9 @@ class PoWNode:
         self.solution_found = value
         self.lock.release()
 
-    def _validate_transaction(self, transaction: dict) -> bool | int:
-        """
-        Validates the integrity of a transaction, used either when adding
-        transactions to the node pool, or during the validation step after
-        a block has been found.
-
-        This method should not be called to validate the coinbase transaction
-        appended by the winning miner.
-
-        Args:
-            transaction (dict): Blockchain transaction following the expected
-            format.
-
-        Returns:
-            False on an invalid transaction, or the resulting fee otherwise.
-        """
-        total = 0
-        data = []
-        inpairs = []
-
-        if transaction["version"] != 1:
-            logging.debug(
-                "Wrong transaction version"
-                + f"\n\texpected: 1"
-                + f"\n\tgot: {transaction['version']}"
-            )
-            return False
-
-        for i in transaction["inputs"]:
-
-            # Extract data from the input
-            txid, out = i["tx_id"], i["v_out"]
-            pub, sig = load_pubkey(i["key"]), load_signature(i["signature"])
-            outpoint = f"{txid}:{out}"
-
-            # Look up output in unspent set
-            if outpoint in inpairs:
-                logging.debug(f"The outpoint {outpoint} was spent twice")
-                return False
-            inpairs.append(outpoint)
-
-            utxo = self.utxo_set.get(txid, None)
-            if not utxo or out not in utxo.v_outs:
-                logging.debug(f"The outpoint {outpoint} is invalid")
-                return False
-
-            tx: dict = self.blockchain[utxo.block_id].transactions[txid]["outputs"][out]
-
-            # Compare public keys
-            keyhash = hash_pubkey(pub)
-            if keyhash != tx["keyhash"]:
-                logging.debug(f"Invalid public key for outpoint {outpoint}")
-                return False
-
-            # Append remainder to total fee
-            if amount := tx.get("amount"):
-                total += amount
-                d = str(amount)
-            else:
-                data.append(tx["data"])
-                d = tx["data"]
-
-            # Compare signature for ownership
-            if not verify(pub=pub, signature=sig, data=d):
-                logging.debug(f"Invalid ownership for outpoint {outpoint}")
-                return False
-
-        # Check resulting fee and p ownership transfer
-        total -= sum([t.get("amount", 0) for t in transaction["outputs"]])
-        outs = [t["data"] for t in transaction["outputs"] if t.get("data")]
-
-        if total < 0:
-            logging.debug(f"Invalid transaction fee: {total}")
-            return False
-
-        if len(set(data) - set(outs)) > 0:
-            logging.debug(f"Invalid transaction, some input data is not being transfered as outputs")
-            return False
-
-        return total
-
-    def _add_block(self, block: PoWBlock):
-        """
-        Add a block to the chain updating all required fees
-
-        Args:
-            block (PoWBlock): Mined block.
-        """
-        self.blockchain.append(block)
-        hashes = {hash_transaction(t): i for i, t in enumerate(self.transactions)}
-
-        for txid, t in block.transactions.items():
-            if t.get("coinbase"):
-                t.pop("coinbase")
-                continue
-
-            # Remove spent transactions from the utxo set
-            utxo = self.utxo_set[txid]
-            spent = [i["v_out"] for i in t["inputs"]]
-            utxo.v_outs = [v for v in utxo.v_outs if v not in spent]
-
-            # Remove the transaction from the pool
-            if txid in hashes:
-                self.transactions.pop(hashes[txid])
+    ###########################################################################
+    # -                           CALLBACK METHODS                           -#
+    ###########################################################################
 
     def mine_block(self, difficulty: str):
         """
@@ -241,20 +119,26 @@ class PoWNode:
             difficulty (str): Target for the PoW operation
         """
         found = False
+
         # Compute the mining fee and add it as the coinbase transaction
-        fee = sum([t.fee for t in self.transactions]) + PoWNode.reward
-        self.transactions.append(
-            {
-                "outputs": [
-                    {"amount": fee, "keyhash": hash_pubkey(self.pub)},
-                ],
-                "coinbase": True,
-            }
+        fee = sum([t.fee for t in self.pool]) + PoWNode.reward
+        self.pool.append(
+            Transaction(
+                data={
+                    "outputs": [
+                        {"amount": fee, "keyhash": hash_pubkey(self.pub)},
+                    ],
+                    "coinbase": True,
+                },
+                fee=0,
+            )
         )
 
         # Create the block and do the Proof-of-Work
         block = PoWBlock(
-            transactions=self.transactions, parent=self.last_hash, target=difficulty
+            transactions=[t.data for t in self.pool],
+            parent=self.blockchain.last_hash,
+            target=difficulty,
         )
         target = block.target_value
 
@@ -266,7 +150,7 @@ class PoWNode:
                 self.mining_signal.clear()
                 if self.get_solution():
                     logging.debug("Solution confirmed, exiting")
-                    self.transactions.pop(-1)
+                    self.pool.pop(-1)
                     exit()
 
             # Hashcash PoW
@@ -278,7 +162,7 @@ class PoWNode:
                     ).encode()
                 )
                 logging.debug(f"Solution found! {PoWBlock.dumps(block)}")
-                self.transactions.pop(-1)
+                self.pool.pop(-1)
                 exit()
 
             block.header.nonce += 1
@@ -298,10 +182,10 @@ class PoWNode:
         block = PoWBlock.loads(message["block"])
 
         # Validate block header values
-        if block.header.hash_parent != self.last_hash:
+        if block.header.hash_parent != self.blockchain.last_hash:
             logging.debug(
                 "Block parent hash is incorrect"
-                + f"\n\texpected:{self.last_hash}"
+                + f"\n\texpected:{self.blockchain.last_hash}"
                 + f"\n\tgot: {block.header.hash_parent}"
             )
             return False
@@ -341,7 +225,7 @@ class PoWNode:
                 fee = t["outputs"][0]["amount"]
                 continue
 
-            if (amount := self._validate_transaction(t)) is False:
+            if (amount := self.blockchain.validate_transaction(t)) is False:
                 return False
 
             total += amount
@@ -365,12 +249,16 @@ class PoWNode:
             transaction (dict): Blockchain transaction following the expected
             format.
         """
-        if (fee := self._validate_transaction(transaction)) is False:
+        if (fee := self.blockchain.validate_transaction(transaction)) is False:
             return
 
         logging.debug(f"Adding transaction {transaction} to the block!")
 
         self.transactions.append(Transaction(data=transaction, fee=fee))
+
+    ###########################################################################
+    # -                             MAIN PROGRAM                             -#
+    ###########################################################################
 
     def run(self):
         """
@@ -402,7 +290,7 @@ class PoWNode:
                     # Mine current transactions (non-blocking)
                     case "mine":
                         logging.debug(
-                            f"Beginning mining operation with transactions: {self.transactions}"
+                            f"Beginning mining operation with transactions: {self.pool}"
                         )
                         self.mining_signal.clear()
                         self.set_solution(False)
@@ -427,7 +315,14 @@ class PoWNode:
                         logging.debug(f"Received veredict: {message}")
                         # Append block and tell miner to stop
                         if message.get("block"):
-                            self._add_block(PoWBlock.loads(message.get("block")))
+                            trs = {hash_transaction(t.data) : t.fee for t in self.pool}
+
+                            new_pool = self.blockchain.add_block(
+                                PoWBlock.loads(message.get("block")),
+                                transactions=[t.data for t in self.pool],
+                            )
+
+                            self.pool = [Transaction(data=t, fee=trs[hash_transaction(t)]) for t in new_pool]
                             self.mining_signal.set()
 
                         # Consensus was not reached, continue mining
