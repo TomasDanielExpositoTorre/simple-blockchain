@@ -17,12 +17,16 @@ import logging
 import threading
 import socket
 import json
+import datetime
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()],
+    handlers=[
+        logging.FileHandler(f"./logs/node-{datetime.datetime.now()}.log", mode="w"),
+    ],
 )
+
 
 GENESIS_HASH = "0000000000000000000000000000000000000000000000000000000000000000"
 
@@ -144,7 +148,11 @@ class PoWNode:
         inpairs = []
 
         if transaction["version"] != 1:
-            logging.debug("Wrong transaction version")
+            logging.debug(
+                "Wrong transaction version"
+                + f"\n\texpected: 1"
+                + f"\n\tgot: {transaction['version']}"
+            )
             return False
 
         for i in transaction["inputs"]:
@@ -195,7 +203,7 @@ class PoWNode:
             return False
 
         if len(set(data) - set(outs)) > 0:
-            logging.debug(f"Invalid transaction, some data is not being transfered")
+            logging.debug(f"Invalid transaction, some input data is not being transfered as outputs")
             return False
 
         return total
@@ -288,22 +296,39 @@ class PoWNode:
 
         # Validate block header values
         if block.header.hash_parent != self.last_hash:
-            logging.debug("Block parent hash is incorrect")
+            logging.debug(
+                "Block parent hash is incorrect"
+                + f"\n\texpected:{self.last_hash}"
+                + f"\n\tgot: {block.header.hash_parent}"
+            )
             return False
 
         if block.header.target != message["difficulty"]:
-            logging.debug("Block difficulty value is incorrect")
+            logging.debug(
+                "Block difficulty value is incorrect"
+                + f"\n\texpected:{message['difficulty']}"
+                + f"\n\tgot: {block.header.target}"
+            )
+
             return False
 
         # Validate obtained hash
         if block.target_value < int(block.hash, 16):
-            logging.debug("Block target was not reached")
+            logging.debug(
+                "Block target was not reached"
+                + f"\n\texpected:{block.target_value}"
+                + f"\n\tgot: {int(block.hash, 16)}"
+            )
             return False
 
         # Validate individual transactions
         for txid, t in block.transactions.items():
             if hash_transaction(t) != txid:
-                logging.debug("Transaction was tampered")
+                logging.debug(
+                    "Transaction was tampered"
+                    + f"\n\texpected hash:{txid}"
+                    + f"\n\tgot: {hash_transaction(t)}"
+                )
                 return False
 
             if t.get("coinbase") and fee != 0:
@@ -319,9 +344,14 @@ class PoWNode:
             total += amount
 
         if fee != (total + PoWNode.reward):
-            logging.debug("Reward value is incorrect")
+            logging.debug(
+                "Reward value is incorrect"
+                + f"\n\texpected:{total + PoWNode.reward}"
+                + f"\n\tgot: {fee}"
+            )
             return False
 
+        logging.debug(f"Received block {message['block']} is valid!")
         return True
 
     def add_transaction(self, transaction: dict):
@@ -334,6 +364,8 @@ class PoWNode:
         """
         if (fee := self._validate_transaction(transaction)) is False:
             return
+
+        logging.debug(f"Adding transaction {transaction} to the block!")
 
         self.transactions.append(Transaction(data=transaction, fee=fee))
 
@@ -357,12 +389,18 @@ class PoWNode:
                 match message.get("type"):
                     # Add a transaction to the chain (blocking)
                     case "transaction":
+                        logging.debug(
+                            f"Incoming transaction from master: {message['transaction']}"
+                        )
                         self.add_transaction(
                             transaction=json.loads(message["transaction"])
                         )
 
                     # Mine current transactions (non-blocking)
                     case "mine":
+                        logging.debug(
+                            f"Beginning mining operation with transactions: {self.transactions}"
+                        )
                         self.mining_signal.clear()
                         self.set_solution(False)
                         threading.Thread(
@@ -373,6 +411,8 @@ class PoWNode:
                     case "verify":
                         self.set_solution(True)
                         valid = self.verify_block(message=message)
+                        logging.debug(f"Vote on sent solution: {valid}")
+
                         self.conn.sendall(
                             json.dumps(
                                 {"type": "verify", "vote": 1 if valid else 0}
@@ -381,6 +421,7 @@ class PoWNode:
 
                     # Add voted block (blocking)
                     case "veredict":
+                        logging.debug(f"Received veredict: {message}")
                         # Append block and tell miner to stop
                         if message.get("block"):
                             self._add_block(PoWBlock.loads(message.get("block")))
@@ -392,7 +433,7 @@ class PoWNode:
                             self.mining_signal.set()
 
                     case "close_connection":
-                        
+                        logging.debug(f"Master disconnection received")
                         disconnected = True
                     case _:
                         logging.debug(f"Message type not recognized")
