@@ -29,8 +29,6 @@ logging.basicConfig(
 )
 
 
-
-
 @dataclass
 class Transaction:
     """
@@ -54,6 +52,7 @@ class Transaction:
 
         """
         return self.fee > other.fee
+
 
 class PoWNode:
     """
@@ -315,14 +314,17 @@ class PoWNode:
                         logging.debug(f"Received veredict: {message}")
                         # Append block and tell miner to stop
                         if message.get("block"):
-                            trs = {hash_transaction(t.data) : t.fee for t in self.pool}
+                            trs = {hash_transaction(t.data): t.fee for t in self.pool}
 
                             new_pool = self.blockchain.add_block(
                                 PoWBlock.loads(message.get("block")),
                                 transactions=[t.data for t in self.pool],
                             )
 
-                            self.pool = [Transaction(data=t, fee=trs[hash_transaction(t)]) for t in new_pool]
+                            self.pool = [
+                                Transaction(data=t, fee=trs[hash_transaction(t)])
+                                for t in new_pool
+                            ]
                             self.mining_signal.set()
 
                         # Consensus was not reached, continue mining

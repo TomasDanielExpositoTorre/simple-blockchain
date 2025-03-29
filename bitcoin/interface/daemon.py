@@ -8,7 +8,9 @@ import logging
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler("./logs/interface-daemon.log", mode="w"),],
+    handlers=[
+        logging.FileHandler("./logs/interface-daemon.log", mode="w"),
+    ],
 )
 
 
@@ -64,8 +66,8 @@ class InterfaceDaemon:
                         case "solution":
                             if self.idle.is_set() or self.voting_started.is_set():
                                 continue
-                            
-                            # Start voting 
+
+                            # Start voting
                             self.solution_queue.append(message["block"])
                             self.voting_started.set()
 
@@ -106,7 +108,7 @@ class InterfaceDaemon:
             with self.lock:
                 self.nodes.append(conn)
             threading.Thread(target=self.handle_connection, args=(conn, addr)).start()
-        
+
         logging.debug(f"Closing connection handler for Master")
 
     def send_to_all(self, message):

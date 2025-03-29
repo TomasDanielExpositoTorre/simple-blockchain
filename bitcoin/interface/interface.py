@@ -3,6 +3,7 @@ import math
 import logging
 from daemon import InterfaceDaemon
 
+
 class Interface(InterfaceDaemon):
     def __init__(self, host="localhost", port=65432, base=2):
         """
@@ -28,7 +29,6 @@ class Interface(InterfaceDaemon):
         solution_queue = self.solution_queue
         self.lock.release()
         return solution_queue
-
 
     def run(self):
         """
@@ -123,7 +123,7 @@ class Interface(InterfaceDaemon):
 
         except KeyboardInterrupt:
             logging.info("Shutting down master.")
-            
+
         self.send_to_all({"type": "close_connection"})
         with self.lock:
             for node in self.nodes:
