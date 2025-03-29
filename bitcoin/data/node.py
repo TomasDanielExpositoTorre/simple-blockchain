@@ -95,6 +95,10 @@ class PoWNode:
         self.mining_signal = threading.Event()
         self.solution_found = False
 
+    ###########################################################################
+    # -                     PROPERTIES, GETTERS & SETTERS                    -#
+    ###########################################################################
+
     @property
     def last_hash(self) -> str:
         """
@@ -102,7 +106,6 @@ class PoWNode:
         """
         return self.blockchain[-1].hash if len(self.blockchain) else GENESIS_HASH
 
-    @property
     def get_solution(self) -> bool:
         """
         Thread-safe wrapper to check if a solution has been found in the chain
@@ -119,177 +122,6 @@ class PoWNode:
         self.lock.acquire()
         self.solution_found = value
         self.lock.release()
-
-    def run(self):
-        """
-        Main routine for this class. Attempts a connection to the main server
-        and handles all events sent by it.
-        """
-        try:
-            self.conn.connect(("localhost", 65432))
-            logging.info("Connected to master.")
-
-            while True:
-
-                # Obtain data from master
-                data = self.conn.recv(self.bufsize)
-                message = json.loads(data.decode())
-
-                match message.get("type"):
-                    # Add a transaction to the chain (blocking)
-                    case "transaction":
-                        self.add_transaction(
-                            transaction=json.loads(message["transaction"])
-                        )
-
-                    # Mine current transactions (non-blocking)
-                    case "mine":
-                        self.mining_signal.clear()
-                        self.set_solution(False)
-                        threading.Thread(
-                            target=self.mine_block, args=(message["difficulty"],)
-                        ).start()
-
-                    # Vote on solution (blocking)
-                    case "verify":
-                        self.set_solution(True)
-                        valid = self.validate_block(message=message)
-                        self.conn.sendall(
-                            json.dumps(
-                                {"type": "verify", "vote": 1 if valid else 0}
-                            ).encode()
-                        )
-                    # Add voted block (blocking)
-                    case "veredict":
-                        # Append block and tell miner to stop
-                        if message.get("block"):
-                            self._add_block(PoWBlock.loads(message.get("block")))
-                            self.mining_signal.set()
-
-                        # Consensus was not reached, continue mining
-                        elif message.get("final"):
-                            self.set_solution(False)
-                            self.mining_signal.set()
-
-                    case _:
-                        logging.debug(f"Message type {_} not recognized")
-        except Exception as e:
-            logging.error(f"Error: {e}")
-
-        self.conn.close()
-
-    def mine_block(self, difficulty: str):
-        """
-        Applies the proof-of-work operation to all current (valid) transactions,
-        and transmits it to other nodes.
-
-        Args:
-            difficulty (str): Target for the PoW operation
-        """
-        found = False
-        # Compute the mining fee and add it as the coinbase transaction
-        fee = sum([t.fee for t in self.transactions]) + PoWNode.reward
-        self.transactions.append(
-            {
-                "outputs": [
-                    {"amount": fee, "keyhash": hash_pubkey(self.pub)},
-                ],
-                "coinbase": True,
-            }
-        )
-
-        # Create the block and do the Proof-of-Work
-        block = PoWBlock(
-            transactions=self.transactions, parent=self.last_hash, target=difficulty
-        )
-        target = block.target_value
-
-        while True:
-            # Halt mining when another node finds the solution
-            if self.get_solution:
-                self.mining_signal.wait()
-                self.mining_signal.clear()
-                if self.get_solution:
-                    self.transactions.pop(-1)
-                    exit()
-
-            # Hashcash PoW
-            if int(block.hash, base=16) <= target:
-                # Send found solution
-                self.conn.sendall(
-                    json.dumps(
-                        {"type": "solution", "block": PoWBlock.dumps(block)}
-                    ).encode()
-                )
-                self.transactions.pop(-1)
-                exit()
-
-            block.header.nonce += 1
-        
-    def validate_block(self, message: str):
-        """
-        Validates a block received from other nodes and appends it to own
-        blockchain after consensus has been reached.
-
-        Args:
-            message (str): json-format containing the block to validate and
-                the expected difficulty.
-        """
-
-        fee, total = 0, 0
-
-        block = PoWBlock.loads(message["block"])
-
-        # Validate block header values
-        if block.header.hash_parent != self.last_hash:
-            logging.debug("Block parent hash is incorrect")
-            return False
-
-        if block.header.target != message["difficulty"]:
-            logging.debug("Block difficulty value is incorrect")
-            return False
-
-        # Validate obtained hash
-        if block.target_value < int(block.hash, 16):
-            logging.debug("Block target was not reached")
-            return False
-
-        # Validate individual transactions
-        for txid, t in block.transactions.items():
-            if hash_transaction(t) != txid:
-                logging.debug("Transaction was tampered")
-                return False
-
-            if t.get("coinbase") and fee != 0:
-                logging.debug("More than one coinbase transaction present in the block")
-                return False
-            elif t.get("coinbase"):
-                fee = t["outputs"][0]["amount"]
-                continue
-
-            if (amount := self._validate_transaction(t)) is False:
-                return False
-
-            total += amount
-
-        if fee != (total + PoWNode.reward):
-            logging.debug("Reward value is incorrect")
-            return False
-
-        return True
-
-    def add_transaction(self, transaction: dict):
-        """
-        Appends a transaction to the current transaction pool.
-
-        Args:
-            transaction (dict): Blockchain transaction following the expected
-            format.
-        """
-        if (fee := self._validate_transaction(transaction)) is False:
-            return
-
-        self.transactions.append(Transaction(data=transaction, fee=fee))
 
     def _validate_transaction(self, transaction: dict) -> bool | int:
         """
@@ -380,6 +212,7 @@ class PoWNode:
 
         for txid, t in block.transactions.items():
             if t.get("coinbase"):
+                t.pop("coinbase")
                 continue
 
             # Remove spent transactions from the utxo set
@@ -391,6 +224,182 @@ class PoWNode:
             if txid in hashes:
                 self.transactions.pop(hashes[txid])
 
+    def mine_block(self, difficulty: str):
+        """
+        Applies the proof-of-work operation to all current (valid) transactions,
+        and transmits it to other nodes.
+
+        Args:
+            difficulty (str): Target for the PoW operation
+        """
+        found = False
+        # Compute the mining fee and add it as the coinbase transaction
+        fee = sum([t.fee for t in self.transactions]) + PoWNode.reward
+        self.transactions.append(
+            {
+                "outputs": [
+                    {"amount": fee, "keyhash": hash_pubkey(self.pub)},
+                ],
+                "coinbase": True,
+            }
+        )
+
+        # Create the block and do the Proof-of-Work
+        block = PoWBlock(
+            transactions=self.transactions, parent=self.last_hash, target=difficulty
+        )
+        target = block.target_value
+
+        while True:
+            # Halt mining when another node finds the solution
+            if self.get_solution():
+                self.mining_signal.wait()
+                self.mining_signal.clear()
+                if self.get_solution():
+                    self.transactions.pop(-1)
+                    exit()
+
+            # Hashcash PoW
+            if int(block.hash, base=16) <= target:
+                # Send found solution
+                self.conn.sendall(
+                    json.dumps(
+                        {"type": "solution", "block": PoWBlock.dumps(block)}
+                    ).encode()
+                )
+                self.transactions.pop(-1)
+                exit()
+
+            block.header.nonce += 1
+
+    def verify_block(self, message: str):
+        """
+        Validates a block received from other nodes and appends it to own
+        blockchain after consensus has been reached.
+
+        Args:
+            message (str): json-format containing the block to validate and
+                the expected difficulty.
+        """
+
+        fee, total = 0, 0
+
+        block = PoWBlock.loads(message["block"])
+
+        # Validate block header values
+        if block.header.hash_parent != self.last_hash:
+            logging.debug("Block parent hash is incorrect")
+            return False
+
+        if block.header.target != message["difficulty"]:
+            logging.debug("Block difficulty value is incorrect")
+            return False
+
+        # Validate obtained hash
+        if block.target_value < int(block.hash, 16):
+            logging.debug("Block target was not reached")
+            return False
+
+        # Validate individual transactions
+        for txid, t in block.transactions.items():
+            if hash_transaction(t) != txid:
+                logging.debug("Transaction was tampered")
+                return False
+
+            if t.get("coinbase") and fee != 0:
+                logging.debug("More than one coinbase transaction present in the block")
+                return False
+            elif t.get("coinbase"):
+                fee = t["outputs"][0]["amount"]
+                continue
+
+            if (amount := self._validate_transaction(t)) is False:
+                return False
+
+            total += amount
+
+        if fee != (total + PoWNode.reward):
+            logging.debug("Reward value is incorrect")
+            return False
+
+        return True
+
+    def add_transaction(self, transaction: dict):
+        """
+        Appends a transaction to the current transaction pool.
+
+        Args:
+            transaction (dict): Blockchain transaction following the expected
+            format.
+        """
+        if (fee := self._validate_transaction(transaction)) is False:
+            return
+
+        self.transactions.append(Transaction(data=transaction, fee=fee))
+
+    def run(self):
+        """
+        Main routine for this class. Attempts a connection to the main server
+        and handles all events sent by it.
+        """
+        disconnected = False
+
+        try:
+            self.conn.connect(("localhost", 65432))
+            logging.info("Connected to master.")
+
+            while not disconnected:
+
+                # Obtain data from master
+                data = self.conn.recv(self.bufsize)
+                message = json.loads(data.decode())
+
+                match message.get("type"):
+                    # Add a transaction to the chain (blocking)
+                    case "transaction":
+                        self.add_transaction(
+                            transaction=json.loads(message["transaction"])
+                        )
+
+                    # Mine current transactions (non-blocking)
+                    case "mine":
+                        self.mining_signal.clear()
+                        self.set_solution(False)
+                        threading.Thread(
+                            target=self.mine_block, args=(message["difficulty"],)
+                        ).start()
+
+                    # Vote on solution (blocking)
+                    case "verify":
+                        self.set_solution(True)
+                        valid = self.verify_block(message=message)
+                        self.conn.sendall(
+                            json.dumps(
+                                {"type": "verify", "vote": 1 if valid else 0}
+                            ).encode()
+                        )
+
+                    # Add voted block (blocking)
+                    case "veredict":
+                        # Append block and tell miner to stop
+                        if message.get("block"):
+                            self._add_block(PoWBlock.loads(message.get("block")))
+                            self.mining_signal.set()
+
+                        # Consensus was not reached, continue mining
+                        elif message.get("final"):
+                            self.set_solution(False)
+                            self.mining_signal.set()
+
+                    case "close_connection":
+                        
+                        disconnected = True
+                    case _:
+                        logging.debug(f"Message type not recognized")
+        except Exception as e:
+            logging.error(f"Error: {e}")
+
+        self.conn.close()
 
 
 priv, pub = create_keypair()
