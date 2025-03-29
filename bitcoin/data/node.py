@@ -261,9 +261,11 @@ class PoWNode:
         while True:
             # Halt mining when another node finds the solution
             if self.get_solution():
+                logging.debug("Solution found by another node")
                 self.mining_signal.wait()
                 self.mining_signal.clear()
                 if self.get_solution():
+                    logging.debug("Solution confirmed, exiting")
                     self.transactions.pop(-1)
                     exit()
 
@@ -275,6 +277,7 @@ class PoWNode:
                         {"type": "solution", "block": PoWBlock.dumps(block)}
                     ).encode()
                 )
+                logging.debug(f"Solution found! {PoWBlock.dumps(block)}")
                 self.transactions.pop(-1)
                 exit()
 
