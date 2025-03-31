@@ -34,6 +34,43 @@ class Blockchain:
         """
         return self.blocks[-1].hash if len(self.blocks) else GENESIS_HASH
 
+    def add_block(self, block: PoWBlock, transactions: list[dict]):
+        """
+        Add a block to the chain updating all required fees
+
+        Args:
+            block (PoWBlock): Mined block.
+        """
+        self.blocks.append(block)
+
+        hashes = {hash_transaction(t): i for i, t in enumerate(transactions)}
+        spent = dict()
+
+        for txid, t in block.transactions.items():
+            # Coinbase transaction, not in the pool and has no inputs
+            if t.get("coinbase"):
+                t.pop("coinbase")
+                continue
+
+            # Store all spent transactions
+            for i in t.get("inputs"):
+                spent.setdefault(i["tx_id"], []).append(t["v_out"])
+
+            # Remove the transaction from the pool
+            if txid in hashes:
+                transactions.pop(hashes[txid])
+
+        # Remove spent transactions inputs from utxo set
+        for txid, vouts in spent.items():
+            if self.utxo_set.get(txid):
+                self.utxo_set[txid] = list(set(utxo_set[txid]) - set(vouts))
+
+        # Add transaction outputs to the uxto set
+        for txid, vouts in block.outpoints.items():
+            self.utxo_set[txid] = vouts
+
+        return transactions
+
     def validate_transaction(self, transaction: dict) -> bool | int:
         """
         Validates the integrity of a transaction, used either when adding
@@ -117,43 +154,6 @@ class Blockchain:
 
         return total
 
-    def add_block(self, block: PoWBlock, transactions: list[dict]):
-        """
-        Add a block to the chain updating all required fees
-
-        Args:
-            block (PoWBlock): Mined block.
-        """
-        self.blocks.append(block)
-
-        hashes = {hash_transaction(t): i for i, t in enumerate(transactions)}
-        spent = dict()
-
-        for txid, t in block.transactions.items():
-            # Coinbase transaction, not in the pool and has no inputs
-            if t.get("coinbase"):
-                t.pop("coinbase")
-                continue
-
-            # Store all spent transactions
-            for i in t.get("inputs"):
-                spent.setdefault(i["tx_id"], []).append(t["v_out"])
-
-            # Remove the transaction from the pool
-            if txid in hashes:
-                transactions.pop(hashes[txid])
-
-        # Remove spent transactions inputs from utxo set
-        for txid, vouts in spent.items():
-            if self.utxo_set.get(txid):
-                self.utxo_set[txid] = list(set(utxo_set[txid]) - set(vouts))
-
-        # Add transaction outputs to the uxto set
-        for txid, vouts in block.outpoints.items():
-            self.utxo_set[txid] = vouts
-
-        return transactions
-
     def validate_block(self, block: PoWBlock, difficulty: str, last_hash: str):
         """
         Validates a block received from other nodes and appends it to own
@@ -225,7 +225,7 @@ class Blockchain:
         logging.debug(f"Block {PoWBlock.dumps(block)} is valid!")
         return True
 
-    def validate_integrity(self) -> bool:
+    def is_valid(self) -> bool:
         """
         Verifies the integrity of the chain and rewrites the utxo chain.
         """
