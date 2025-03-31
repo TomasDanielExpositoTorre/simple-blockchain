@@ -60,7 +60,7 @@ class PoWNode:
     proof-of-work operation and validate mined blocks.
     """
 
-    blockchain = Blockchain(blocks=[], utxo_set={})
+    blockchain = Blockchain(blocks=[])
     pool: list[Transaction] = []
     reward: float = 3.125
 
@@ -166,80 +166,6 @@ class PoWNode:
 
             block.header.nonce += 1
 
-    def verify_block(self, message: str):
-        """
-        Validates a block received from other nodes and appends it to own
-        blockchain after consensus has been reached.
-
-        Args:
-            message (str): json-format containing the block to validate and
-                the expected difficulty.
-        """
-
-        fee, total = 0, 0
-
-        block = PoWBlock.loads(message["block"])
-
-        # Validate block header values
-        if block.header.hash_parent != self.blockchain.last_hash:
-            logging.debug(
-                "Block parent hash is incorrect"
-                + f"\n\texpected:{self.blockchain.last_hash}"
-                + f"\n\tgot: {block.header.hash_parent}"
-            )
-            return False
-
-        if block.header.target != message["difficulty"]:
-            logging.debug(
-                "Block difficulty value is incorrect"
-                + f"\n\texpected:{message['difficulty']}"
-                + f"\n\tgot: {block.header.target}"
-            )
-
-            return False
-
-        # Validate obtained hash
-        if block.target_value < int(block.hash, 16):
-            logging.debug(
-                "Block target was not reached"
-                + f"\n\texpected:{block.target_value}"
-                + f"\n\tgot: {int(block.hash, 16)}"
-            )
-            return False
-
-        # Validate individual transactions
-        for txid, t in block.transactions.items():
-            if hash_transaction(t) != txid:
-                logging.debug(
-                    "Transaction was tampered"
-                    + f"\n\texpected hash:{txid}"
-                    + f"\n\tgot: {hash_transaction(t)}"
-                )
-                return False
-
-            if t.get("coinbase") and fee != 0:
-                logging.debug("More than one coinbase transaction present in the block")
-                return False
-            elif t.get("coinbase"):
-                fee = t["outputs"][0]["amount"]
-                continue
-
-            if (amount := self.blockchain.validate_transaction(t)) is False:
-                return False
-
-            total += amount
-
-        if fee != (total + PoWNode.reward):
-            logging.debug(
-                "Reward value is incorrect"
-                + f"\n\texpected:{total + PoWNode.reward}"
-                + f"\n\tgot: {fee}"
-            )
-            return False
-
-        logging.debug(f"Received block {message['block']} is valid!")
-        return True
-
     def add_transaction(self, transaction: dict):
         """
         Appends a transaction to the current transaction pool.
@@ -300,7 +226,11 @@ class PoWNode:
                     # Vote on solution (blocking)
                     case "verify":
                         self.set_solution(True)
-                        valid = self.verify_block(message=message)
+                        valid = self.blockchain.validate_block(
+                            block=PoWBlock.loads(message["block"]),
+                            difficulty=message["difficulty"],
+                            last_hash=self.blockchain.last_hash
+                        )
                         logging.debug(f"Vote on sent solution: {valid}")
 
                         self.conn.sendall(

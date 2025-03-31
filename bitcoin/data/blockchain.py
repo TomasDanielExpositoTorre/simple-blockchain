@@ -1,9 +1,10 @@
 import hashlib
 import datetime
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from crypto import hash_transaction
 from block import PoWBlock
+import logging
 
 GENESIS_HASH = "0000000000000000000000000000000000000000000000000000000000000000"
 
@@ -23,7 +24,8 @@ class UTXO:
 @dataclass
 class Blockchain:
     blocks: list[PoWBlock]
-    utxo_set: dict[str, UTXO]
+    utxo_set: dict[str, UTXO] = field(default_factory=dict)
+    reward: int = 3.125
 
     @property
     def last_hash(self) -> str:
@@ -123,17 +125,15 @@ class Blockchain:
             block (PoWBlock): Mined block.
         """
         self.blocks.append(block)
+
         hashes = {hash_transaction(t): i for i, t in enumerate(transactions)}
         spent = dict()
 
         for txid, t in block.transactions.items():
+            # Coinbase transaction, not in the pool and has no inputs
             if t.get("coinbase"):
                 t.pop("coinbase")
                 continue
-
-            # Update utxo set with new transaction outputs
-            if len(t.get("outputs", [])):
-                utxo[txid] = list(range(t["outputs"]))
 
             # Store all spent transactions
             for i in t.get("inputs"):
@@ -143,9 +143,134 @@ class Blockchain:
             if txid in hashes:
                 transactions.pop(hashes[txid])
 
-        # Remove spent transactions from utxo set
+        # Remove spent transactions inputs from utxo set
         for txid, vouts in spent.items():
-            if utxo_set.get(txid):
-                utxo_set[txid] = list(set(utxo_set[txid]) - set(vouts))
+            if self.utxo_set.get(txid):
+                self.utxo_set[txid] = list(set(utxo_set[txid]) - set(vouts))
+
+        # Add transaction outputs to the uxto set
+        for txid, vouts in block.outpoints.items():
+            self.utxo_set[txid] = vouts
 
         return transactions
+
+    def validate_block(self, block: PoWBlock, difficulty: str, last_hash: str):
+        """
+        Validates a block received from other nodes and appends it to own
+        blockchain after consensus has been reached.
+
+        Args:
+            message (str): json-format containing the block to validate and
+                the expected difficulty.
+        """
+
+        fee, total = 0, 0
+
+        # Validate block header values
+        if block.header.hash_parent != last_hash:
+            logging.debug(
+                "Block parent hash is incorrect"
+                + f"\n\texpected:{self.blockchain.last_hash}"
+                + f"\n\tgot: {block.header.hash_parent}"
+            )
+            return False
+
+        if block.header.target != difficulty:
+            logging.debug(
+                "Block difficulty value is incorrect"
+                + f"\n\texpected:{difficulty}"
+                + f"\n\tgot: {block.header.target}"
+            )
+            return False
+
+        # Validate obtained hash
+        if block.target_value < int(block.hash, 16):
+            logging.debug(
+                "Block target was not reached"
+                + f"\n\texpected:{block.target_value}"
+                + f"\n\tgot: {int(block.hash, 16)}"
+            )
+            return False
+
+        # Validate individual transactions
+        for txid, t in block.transactions.items():
+            if hash_transaction(t) != txid:
+                logging.debug(
+                    "Transaction was tampered"
+                    + f"\n\texpected hash:{txid}"
+                    + f"\n\tgot: {hash_transaction(t)}"
+                )
+                return False
+
+            if t.get("coinbase") and fee != 0:
+                logging.debug("More than one coinbase transaction present in the block")
+                return False
+            elif t.get("coinbase"):
+                fee = t["outputs"][0]["amount"]
+                continue
+
+            if (amount := self.blockchain.validate_transaction(t)) is False:
+                return False
+
+            total += amount
+
+        if fee != (total + Blockchain.reward):
+            logging.debug(
+                "Reward value is incorrect"
+                + f"\n\texpected:{total + Blockchain.reward}"
+                + f"\n\tgot: {fee}"
+            )
+            return False
+
+        logging.debug(f"Block {PoWBlock.dumps(block)} is valid!")
+        return True
+
+    def integrity(self) -> bool:
+        """
+        Verifies the integrity of the chain and computes a new utxo set.
+        """
+        new_utxo_set: dict[str, UTXO] = {}
+
+        if not len(self.blocks):
+            return True
+
+        # Genesis block validation
+        with self.blocks[0] as genesis_block:
+            self.validate_block(
+                block=genesis_block,
+                difficulty=genesis_block.header.target,
+                last_hash=GENESIS_HASH,
+            )
+
+            # Add transaction outputs to the uxto set
+            for txid, vouts in genesis_block.outpoints.keys():
+                new_utxo_set[txid] = vouts
+
+        # Individual block validation
+        for i, block in enumerate(self.blocks, start=1):
+            if not self.validate_block(
+                block=block,
+                difficulty=block.header.target,
+                last_hash=self.blocks[i - 1].hash,
+            ):
+                return False
+
+            spent = {
+                i["tx_id"]: spent.setdefault(i["tx_id"], []).append(t["v_out"])
+                for t in block.transactions.values()
+                for i in t.get("inputs")
+            }
+
+            # Remove spent transactions inputs from utxo set
+            for txid, vouts in spent.items():
+                if new_utxo_set.get(txid):
+                    new_utxo_set[txid] = list(set(utxo_set[txid]) - set(vouts))
+
+            # Add transaction outputs to the uxto set
+            for txid, vouts in block.outpoints.keys():
+                new_utxo_set[txid] = vouts
+
+        self.utxo_set = new_utxo_set
+        logging.info("All blockchain transactions are valid!")
+        
+        return True

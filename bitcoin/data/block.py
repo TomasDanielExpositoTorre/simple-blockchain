@@ -93,6 +93,13 @@ class PoWBlock:
             256 ** (int(self.header.target[0:2], base=16) - 3)
         )
 
+    @property
+    def outpoints(self):
+        return {
+            txid: list(range(len(t.get("outputs", []))))
+            for txid, t in self.transactions.items()
+        }
+
     @classmethod
     def merkle_root(cls, transactions) -> str:
         """
