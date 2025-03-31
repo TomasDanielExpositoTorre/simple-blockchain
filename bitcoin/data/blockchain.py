@@ -170,7 +170,7 @@ class Blockchain:
         if block.header.hash_parent != last_hash:
             logging.debug(
                 "Block parent hash is incorrect"
-                + f"\n\texpected:{self.blockchain.last_hash}"
+                + f"\n\texpected:{last_hash}"
                 + f"\n\tgot: {block.header.hash_parent}"
             )
             return False
@@ -225,11 +225,10 @@ class Blockchain:
         logging.debug(f"Block {PoWBlock.dumps(block)} is valid!")
         return True
 
-    def integrity(self) -> bool:
+    def validate_integrity(self) -> bool:
         """
-        Verifies the integrity of the chain and computes a new utxo set.
+        Verifies the integrity of the chain and rewrites the utxo chain.
         """
-        new_utxo_set: dict[str, UTXO] = {}
 
         if not len(self.blocks):
             return True
@@ -241,10 +240,8 @@ class Blockchain:
                 difficulty=genesis_block.header.target,
                 last_hash=GENESIS_HASH,
             )
-
-            # Add transaction outputs to the uxto set
             for txid, vouts in genesis_block.outpoints.keys():
-                new_utxo_set[txid] = vouts
+                self.utxo_set[txid] = vouts
 
         # Individual block validation
         for i, block in enumerate(self.blocks, start=1):
@@ -263,14 +260,13 @@ class Blockchain:
 
             # Remove spent transactions inputs from utxo set
             for txid, vouts in spent.items():
-                if new_utxo_set.get(txid):
-                    new_utxo_set[txid] = list(set(utxo_set[txid]) - set(vouts))
+                if self.utxo_set.get(txid):
+                    self.utxo_set[txid] = list(set(utxo_set[txid]) - set(vouts))
 
             # Add transaction outputs to the uxto set
             for txid, vouts in block.outpoints.keys():
-                new_utxo_set[txid] = vouts
+                self.utxo_set[txid] = vouts
 
-        self.utxo_set = new_utxo_set
         logging.info("All blockchain transactions are valid!")
-        
+
         return True
