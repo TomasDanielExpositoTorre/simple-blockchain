@@ -77,8 +77,7 @@ class PoWNode:
 
         # Network data
         self.bufsize = 1024**2
-        self.sender = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.receiver = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         # Threading data
         self.lock = threading.Lock()
@@ -108,7 +107,8 @@ class PoWNode:
 
     def send(self, data: bytes):
         with self.lock:
-            self.sender.sendall(data)
+            self.conn.sendall(data)
+    
     ###########################################################################
     # -                           CALLBACK METHODS                           -#
     ###########################################################################
@@ -197,14 +197,13 @@ class PoWNode:
         disconnected = False
 
         try:
-            self.sender.connect(("localhost", 65432))
-            self.receiver.connect(("localhost", 65433))
+            self.conn.connect(("localhost", 65432))
             logging.info("Connected to master.")
 
             while not disconnected:
 
                 # Obtain data from master
-                data = self.receiver.recv(self.bufsize)
+                data = self.conn.recv(self.bufsize)
                 message = json.loads(data.decode())
 
                 match message.get("type"):
@@ -275,8 +274,7 @@ class PoWNode:
         except Exception as e:
             logging.error(f"Error: {e}")
 
-        self.sender.close()
-        self.receiver.close()
+        self.conn.close()
 
 
 priv, pub = create_keypair()
