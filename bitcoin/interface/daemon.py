@@ -2,14 +2,15 @@ import socket
 import threading
 import json
 import logging
-
+from bitcoin.data.blockchain import Blockchain
+from bitcoin.data.block import PoWBlock
 
 # Configure logging
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler("./logs/interface-daemon.log", mode="w"),
+        logging.FileHandler("bitcoin/logs/interface-daemon.log", mode="w"),
     ],
 )
 
@@ -36,6 +37,8 @@ class InterfaceDaemon:
         self.voting_started = threading.Event()
         self.voting_over = threading.Event()
 
+        # Own blockchain
+        self.blockchain = Blockchain(blocks=[])
     @property
     def voting_finished(self) -> bool:
         """

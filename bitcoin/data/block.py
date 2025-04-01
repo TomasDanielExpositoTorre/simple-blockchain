@@ -7,7 +7,7 @@ import hashlib
 import datetime
 import json
 from dataclasses import asdict, dataclass
-from crypto import hash_transaction
+from bitcoin.data.crypto import hash_transaction
 
 
 @dataclass

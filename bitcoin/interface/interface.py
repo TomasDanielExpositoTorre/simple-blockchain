@@ -1,8 +1,8 @@
 import threading
 import math
 import logging
-from daemon import InterfaceDaemon
-
+from bitcoin.interface.daemon import InterfaceDaemon
+from bitcoin.data.block import PoWBlock
 
 class Interface(InterfaceDaemon):
     def __init__(self, host="localhost", port=65432, base=2):
@@ -61,10 +61,10 @@ class Interface(InterfaceDaemon):
                         # Send mining event to all nodes
                         diff = self.difficulty
                         logging.debug(f"Computed difficulty: {diff}")
+                        self.idle.clear()
                         self.send_to_all({"type": "mine", "difficulty": diff})
 
                         # Wait for the first solution to arrive
-                        self.idle.clear()
                         self.voting_started.wait()
                         logging.debug("Solution found! Starting vote...")
 
@@ -82,6 +82,8 @@ class Interface(InterfaceDaemon):
                             self.voting_over.wait()
                             self.voting_over.clear()
 
+                            logging.info(f"Number of nodes in network: {len(self.nodes)}")
+                            logging.info(f"Number of accepted votes: {sum(self.consensus)}")
                             # Handle consensus response
                             if sum(self.consensus) >= 0.51 * len(
                                 self.nodes
@@ -94,8 +96,11 @@ class Interface(InterfaceDaemon):
                                     self.idle.set()
                                     self.voting_started.clear()
                                     self.solution_queue = []
+                                    self.blockchain.blocks.append(
+                                        PoWBlock.loads(solution)
+                                    )
                             elif i + 1 == len(
-                                solution_queue
+                                self.solutions
                             ):  # Block rejected, continue mining
                                 logging.debug("Last solution rejected")
                                 self.send_to_all({"type": "veredict", "final": True})
@@ -113,7 +118,7 @@ class Interface(InterfaceDaemon):
                     case "visualize":
                         pass
                     case "integrity":
-                        pass
+                        print(self.blockchain.validate_chain())
                     case "exit":
                         break
                     case _:

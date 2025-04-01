@@ -2,8 +2,8 @@ import hashlib
 import datetime
 import json
 from dataclasses import asdict, dataclass, field
-from crypto import hash_transaction
-from block import PoWBlock
+from bitcoin.data.crypto import hash_transaction
+from bitcoin.data.block import PoWBlock
 import logging
 
 GENESIS_HASH = "0000000000000000000000000000000000000000000000000000000000000000"
@@ -54,7 +54,7 @@ class Blockchain:
 
             # Store all spent transactions
             for i in t.get("inputs"):
-                spent.setdefault(i["tx_id"], []).append(t["v_out"])
+                spent.setdefault(i["tx_id"], []).append(i["v_out"])
 
             # Remove the transaction from the pool
             if txid in hashes:
@@ -225,7 +225,7 @@ class Blockchain:
         logging.debug(f"Block {PoWBlock.dumps(block)} is valid!")
         return True
 
-    def is_valid(self) -> bool:
+    def validate_chain(self) -> bool:
         """
         Verifies the integrity of the chain and rewrites the utxo chain.
         """
@@ -234,17 +234,16 @@ class Blockchain:
             return True
 
         # Genesis block validation
-        with self.blocks[0] as genesis_block:
-            self.validate_block(
-                block=genesis_block,
-                difficulty=genesis_block.header.target,
-                last_hash=GENESIS_HASH,
-            )
-            for txid, vouts in genesis_block.outpoints.keys():
-                self.utxo_set[txid] = vouts
+        self.validate_block(
+            block=self.blocks[0],
+            difficulty=self.blocks[0].header.target,
+            last_hash=GENESIS_HASH,
+        )
+        for txid, vouts in self.blocks[0].outpoints.items():
+            self.utxo_set[txid] = vouts
 
         # Individual block validation
-        for i, block in enumerate(self.blocks, start=1):
+        for i, block in enumerate(self.blocks[1:], start=1):
             if not self.validate_block(
                 block=block,
                 difficulty=block.header.target,
@@ -252,11 +251,10 @@ class Blockchain:
             ):
                 return False
 
-            spent = {
-                i["tx_id"]: spent.setdefault(i["tx_id"], []).append(t["v_out"])
-                for t in block.transactions.values()
-                for i in t.get("inputs")
-            }
+            spent = {}
+            for t in block.transactions.values():
+                for i in t.get("inputs", []):
+                    spent.setdefault(i["tx_id"], []).append(i["v_out"])
 
             # Remove spent transactions inputs from utxo set
             for txid, vouts in spent.items():
@@ -264,7 +262,7 @@ class Blockchain:
                     self.utxo_set[txid] = list(set(utxo_set[txid]) - set(vouts))
 
             # Add transaction outputs to the uxto set
-            for txid, vouts in block.outpoints.keys():
+            for txid, vouts in block.outpoints.items():
                 self.utxo_set[txid] = vouts
 
         logging.info("All blockchain transactions are valid!")

@@ -3,10 +3,10 @@ This module defines the structure and methods required for a PoW blockchain
 node.
 """
 
-from blockchain import Blockchain
-from block import PoWBlock
+from bitcoin.data.blockchain import Blockchain
+from bitcoin.data.block import PoWBlock
 from dataclasses import dataclass
-from crypto import (
+from bitcoin.data.crypto import (
     load_pubkey,
     load_signature,
     hash_pubkey,
@@ -24,7 +24,7 @@ logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler(f"./logs/node-{datetime.datetime.now()}.log", mode="w"),
+        logging.FileHandler(f"bitcoin/logs/node-{datetime.datetime.now()}.log", mode="w"),
     ],
 )
 
@@ -229,7 +229,7 @@ class PoWNode:
                         valid = self.blockchain.validate_block(
                             block=PoWBlock.loads(message["block"]),
                             difficulty=message["difficulty"],
-                            last_hash=self.blockchain.last_hash
+                            last_hash=self.blockchain.last_hash,
                         )
                         logging.debug(f"Vote on sent solution: {valid}")
 
