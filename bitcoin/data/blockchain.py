@@ -49,7 +49,6 @@ class Blockchain:
         for txid, t in block.transactions.items():
             # Coinbase transaction, not in the pool and has no inputs
             if t.get("coinbase"):
-                t.pop("coinbase")
                 continue
 
             # Store all spent transactions

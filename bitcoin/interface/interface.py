@@ -19,7 +19,7 @@ class Interface(InterfaceDaemon):
         with self.lock:
             diff = hex(
                 32
-                - (self.base_difficulty + math.floor(math.log(len(self.nodes) + 1, 4)))
+                - (self.base_difficulty + math.floor(math.log(len(self.receivers) + 1, 4)))
             )
             return f"0{diff[2:]}ffffff" if len(diff) == 3 else f"{diff[2:]}ffffff"
 
@@ -35,10 +35,15 @@ class Interface(InterfaceDaemon):
         Main callback for this class, which processes user input to send
         directives to all nodes.
         """
-        # Start the connection handing daemon
-        server_thread = threading.Thread(target=self.connection_daemon)
-        server_thread.daemon = True
-        server_thread.start()
+        # Start the connection handing daemons
+        rthread = threading.Thread(target=self.receiver_daemon)
+        rthread.daemon = True
+        rthread.start()
+
+        sthread = threading.Thread(target=self.sender_daemon)
+        sthread.daemon = True
+        sthread.start()
+
         self.idle.set()
 
         print("Simple Blockchain Simulator")
@@ -82,11 +87,11 @@ class Interface(InterfaceDaemon):
                             self.voting_over.wait()
                             self.voting_over.clear()
 
-                            logging.info(f"Number of nodes in network: {len(self.nodes)}")
+                            logging.info(f"Number of nodes in network: {len(self.receivers)}")
                             logging.info(f"Number of accepted votes: {sum(self.consensus)}")
                             # Handle consensus response
                             if sum(self.consensus) >= 0.51 * len(
-                                self.nodes
+                                self.receivers
                             ):  # Block accepted
                                 logging.debug("Solution accepted!")
                                 self.send_to_all(
@@ -131,8 +136,10 @@ class Interface(InterfaceDaemon):
 
         self.send_to_all({"type": "close_connection"})
         with self.lock:
-            for node in self.nodes:
-                node.close()
+            for sender in self.senders.values():
+                sender.close()
+            for receiver in self.receivers.values():
+                receiver.close()
         exit()
 
 

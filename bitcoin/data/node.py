@@ -77,7 +77,8 @@ class PoWNode:
 
         # Network data
         self.bufsize = 1024**2
-        self.conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sender = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.receiver = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         # Threading data
         self.lock = threading.Lock()
@@ -85,7 +86,7 @@ class PoWNode:
         self.solution_found = False
 
     ###########################################################################
-    # -                     PROPERTIES, GETTERS & SETTERS                    -#
+    # -                      METHODS, GETTERS & SETTERS-                     -#
     ###########################################################################
 
     def get_solution(self) -> bool:
@@ -105,6 +106,9 @@ class PoWNode:
         self.solution_found = value
         self.lock.release()
 
+    def send(self, data: bytes):
+        with self.lock:
+            self.sender.sendall(data)
     ###########################################################################
     # -                           CALLBACK METHODS                           -#
     ###########################################################################
@@ -155,7 +159,7 @@ class PoWNode:
             # Hashcash PoW
             if int(block.hash, base=16) <= target:
                 # Send found solution
-                self.conn.sendall(
+                self.send(
                     json.dumps(
                         {"type": "solution", "block": PoWBlock.dumps(block)}
                     ).encode()
@@ -193,13 +197,14 @@ class PoWNode:
         disconnected = False
 
         try:
-            self.conn.connect(("localhost", 65432))
+            self.sender.connect(("localhost", 65432))
+            self.receiver.connect(("localhost", 65433))
             logging.info("Connected to master.")
 
             while not disconnected:
 
                 # Obtain data from master
-                data = self.conn.recv(self.bufsize)
+                data = self.receiver.recv(self.bufsize)
                 message = json.loads(data.decode())
 
                 match message.get("type"):
@@ -233,7 +238,7 @@ class PoWNode:
                         )
                         logging.debug(f"Vote on sent solution: {valid}")
 
-                        self.conn.sendall(
+                        self.send(
                             json.dumps(
                                 {"type": "verify", "vote": 1 if valid else 0}
                             ).encode()
@@ -270,7 +275,8 @@ class PoWNode:
         except Exception as e:
             logging.error(f"Error: {e}")
 
-        self.conn.close()
+        self.sender.close()
+        self.receiver.close()
 
 
 priv, pub = create_keypair()

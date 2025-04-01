@@ -29,7 +29,8 @@ class InterfaceDaemon:
         # Variables for voting and adding blocks to the chain
         self.solution_queue = []
         self.consensus = []
-        self.nodes = []
+        self.receivers : dict = {}
+        self.senders : dict = {}
 
         # State definition and thread communication
         self.lock = threading.Lock()
@@ -44,9 +45,9 @@ class InterfaceDaemon:
         """
         Checks if voting is currently finished.
         """
-        return len(self.consensus) == len(self.nodes) or sum(
+        return len(self.consensus) == len(self.receivers) or sum(
             self.consensus
-        ) >= 0.51 * len(self.nodes)
+        ) >= 0.51 * len(self.receivers)
 
     def handle_connection(self, conn, addr):
         """
@@ -91,11 +92,13 @@ class InterfaceDaemon:
         logging.debug(f"Node at {addr} disconnected.")
 
         with self.lock:
-            if conn in self.nodes:
-                self.nodes.remove(conn)
+            if port in self.receivers.keys():
+                self.receivers.pop(port)
+            if port in self.senders.keys():
+                self.senders.pop(port)
         conn.close()
 
-    def connection_daemon(self):
+    def receiver_daemon(self):
         """
         Background thread callback to accept and handle incoming connections.
         """
@@ -103,16 +106,34 @@ class InterfaceDaemon:
         server_socket.bind((self.host, self.port))
         server_socket.listen()
 
-        logging.debug(f"Master listening on {self.host}:{self.port}")
+        logging.debug(f"Master receiving data on {self.host}:{self.port}")
 
         while True:
             conn, addr = server_socket.accept()
-            logging.debug(f"New node connected from {addr}.")
+            logging.debug(f"New sender node connected from {addr}.")
             with self.lock:
-                self.nodes.append(conn)
+                self.receivers[addr[1]] = conn
             threading.Thread(target=self.handle_connection, args=(conn, addr)).start()
 
-        logging.debug(f"Closing connection handler for Master")
+        logging.debug(f"Closing reception handler for Master")
+
+    def sender_daemon(self):
+        """
+        Background thread callback to set up writing connections.
+        """
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_socket.bind((self.host, self.port+1))
+        server_socket.listen()
+
+        logging.debug(f"Master sending data on {self.host}:{self.port+1}")
+
+        while True:
+            conn, addr = server_socket.accept()
+            logging.debug(f"New receiver node connected from {addr}.")
+            with self.lock:
+                self.senders[addr[1]] = conn
+
+        logging.debug(f"Closing sending handler for Master")
 
     def send_to_all(self, message):
         """
@@ -123,9 +144,10 @@ class InterfaceDaemon:
         """
         logging.debug(f"Sending message: {message} to all connected nodes")
         with self.lock:
-            for node in self.nodes:
+            for port, sender in self.senders.items():
                 try:
-                    node.sendall(json.dumps(message).encode())
+                    sender.sendall(json.dumps(message).encode())
                 except Exception as e:
                     logging.error(f"Failed to send to node: {e}")
-                    self.node.remove(node)
+                    self.senders.pop(port)
+                    self.receivers.pop(port)
