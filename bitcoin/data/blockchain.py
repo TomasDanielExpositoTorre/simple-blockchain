@@ -27,6 +27,9 @@ class Blockchain:
     utxo_set: dict[str, UTXO] = field(default_factory=dict)
     reward: int = 3.125
 
+    def __len__(self) -> int:
+        return len(self.blocks)
+
     @property
     def last_hash(self) -> str:
         """
@@ -34,6 +37,9 @@ class Blockchain:
         """
         return self.blocks[-1].hash if len(self.blocks) else GENESIS_HASH
 
+    def serialize(self) -> list[str]:
+        return [PoWBlock.dumps(block) for block in self.blocks]
+        
     def add_block(self, block: PoWBlock, transactions: list[dict]):
         """
         Add a block to the chain updating all required fees

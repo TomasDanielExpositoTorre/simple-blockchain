@@ -39,6 +39,7 @@ class InterfaceDaemon:
 
         # Own blockchain
         self.blockchain = Blockchain(blocks=[])
+
     @property
     def voting_finished(self) -> bool:
         """
@@ -57,6 +58,10 @@ class InterfaceDaemon:
             addr: Connection address
         """
         try:
+            with self.lock:
+                if len(self.blockchain):
+                    conn.sendall(json.dumps({"type": "chain", "blockchain": self.blockchain.serialize()}).encode())
+
             while True:
 
                 # Obtain data from node
@@ -83,6 +88,23 @@ class InterfaceDaemon:
 
                             if self.voting_finished:
                                 self.voting_over.set()
+                        case "chain":
+                            blockchain = Blockchain(
+                                blocks=[
+                                    PoWBlock.loads(block)
+                                    for block in message["blockchain"]
+                                ]
+                            )
+
+                            if len(blockchain) > len(self.blockchain):
+                                self.lock.acquire()
+                                self.blockchain = (
+                                    blockchain
+                                    if blockchain.validate_chain()
+                                    else self.blockchain
+                                )
+                                self.lock.release()
+
                         case _:
                             print(f"Unsupported message type: {_}")
         except Exception as e:
@@ -91,8 +113,8 @@ class InterfaceDaemon:
         logging.debug(f"Node at {addr} disconnected.")
 
         with self.lock:
-            if node in self.nodes:
-                self.nodes.remove(node)
+            if conn in self.nodes:
+                self.nodes.remove(conn)
         conn.close()
 
     def daemon(self):

@@ -24,7 +24,9 @@ logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler(f"bitcoin/logs/node-{datetime.datetime.now()}.log", mode="w"),
+        logging.FileHandler(
+            f"bitcoin/logs/node-{datetime.datetime.now()}.log", mode="w"
+        ),
     ],
 )
 
@@ -62,7 +64,6 @@ class PoWNode:
 
     blockchain = Blockchain(blocks=[])
     pool: list[Transaction] = []
-    reward: float = 3.125
 
     def __init__(self, pub, priv):
         """Constructor method for this class.
@@ -108,7 +109,7 @@ class PoWNode:
     def send(self, data: bytes):
         with self.lock:
             self.conn.sendall(data)
-    
+
     ###########################################################################
     # -                           CALLBACK METHODS                           -#
     ###########################################################################
@@ -124,13 +125,11 @@ class PoWNode:
         found = False
 
         # Compute the mining fee and add it as the coinbase transaction
-        fee = sum([t.fee for t in self.pool]) + PoWNode.reward
+        fee = sum([t.fee for t in self.pool]) + Blockchain.reward
         self.pool.append(
             Transaction(
                 data={
-                    "outputs": [
-                        {"amount": fee, "keyhash": hash_pubkey(self.pub)},
-                    ],
+                    "outputs": [{"amount": fee, "keyhash": hash_pubkey(self.pub)}],
                     "coinbase": True,
                 },
                 fee=0,
@@ -145,16 +144,7 @@ class PoWNode:
         )
         target = block.target_value
 
-        while True:
-            # Halt mining when another node finds the solution
-            if self.get_solution():
-                logging.debug("Solution found by another node")
-                self.mining_signal.wait()
-                self.mining_signal.clear()
-                if self.get_solution():
-                    logging.debug("Solution confirmed, exiting")
-                    self.pool.pop(-1)
-                    exit()
+        while not found:
 
             # Hashcash PoW
             if int(block.hash, base=16) <= target:
@@ -165,10 +155,20 @@ class PoWNode:
                     ).encode()
                 )
                 logging.debug(f"Solution found! {PoWBlock.dumps(block)}")
-                self.pool.pop(-1)
-                exit()
+                found = True
+
+            # Halt mining when another node finds the solution
+            if not found and self.get_solution():
+                logging.debug("Solution found by another node")
+                self.mining_signal.wait()
+                self.mining_signal.clear()
+                found = self.get_solution()
 
             block.header.nonce += 1
+
+        logging.debug("Solution confirmed, exiting")
+        self.pool.pop()
+        exit()
 
     def add_transaction(self, transaction: dict):
         """
@@ -196,87 +196,108 @@ class PoWNode:
         """
         disconnected = False
 
-        try:
-            self.conn.connect(("localhost", 65432))
-            logging.info("Connected to master.")
+        self.conn.connect(("localhost", 65432))
+        logging.info("Connected to master.")
 
-            while not disconnected:
+        while not disconnected:
 
-                # Obtain data from master
-                data = self.conn.recv(self.bufsize)
-                message = json.loads(data.decode())
+            # Obtain data from master
+            data = self.conn.recv(self.bufsize)
+            message = json.loads(data.decode())
 
-                match message.get("type"):
-                    # Add a transaction to the chain (blocking)
-                    case "transaction":
-                        logging.debug(
-                            f"Incoming transaction from master: {message['transaction']}"
+            match message.get("type").lower():
+                # Add a transaction to the chain (blocking)
+                case "transaction":
+                    logging.debug(
+                        f"Incoming transaction from master: {message['transaction']}"
+                    )
+                    self.add_transaction(transaction=json.loads(message["transaction"]))
+
+                # Mine current transactions (non-blocking)
+                case "mine":
+                    logging.debug(
+                        f"Beginning mining operation with transactions: {self.pool}"
+                    )
+                    self.mining_signal.clear()
+                    self.set_solution(False)
+                    threading.Thread(
+                        target=self.mine_block, args=(message["difficulty"],)
+                    ).start()
+
+                # Vote on solution (blocking)
+                case "verify":
+                    self.set_solution(True)
+                    valid = self.blockchain.validate_block(
+                        block=PoWBlock.loads(message["block"]),
+                        difficulty=message["difficulty"],
+                        last_hash=self.blockchain.last_hash,
+                    )
+                    logging.debug(f"Vote on sent solution: {valid}")
+
+                    self.send(
+                        json.dumps(
+                            {"type": "verify", "vote": 1 if valid else 0}
+                        ).encode()
+                    )
+
+                # Add voted block (blocking)
+                case "veredict":
+                    logging.debug(f"Received veredict: {message}")
+                    # Append block and tell miner to stop
+                    if message.get("block"):
+                        trs = {hash_transaction(t.data): t.fee for t in self.pool}
+
+                        new_pool = self.blockchain.add_block(
+                            PoWBlock.loads(message.get("block")),
+                            transactions=[t.data for t in self.pool],
                         )
-                        self.add_transaction(
-                            transaction=json.loads(message["transaction"])
-                        )
 
-                    # Mine current transactions (non-blocking)
-                    case "mine":
-                        logging.debug(
-                            f"Beginning mining operation with transactions: {self.pool}"
-                        )
-                        self.mining_signal.clear()
+                        self.pool = [
+                            Transaction(data=t, fee=trs[hash_transaction(t)])
+                            for t in new_pool
+                        ]
+                        self.mining_signal.set()
+
+                    # Consensus was not reached, continue mining
+                    elif message.get("final"):
                         self.set_solution(False)
-                        threading.Thread(
-                            target=self.mine_block, args=(message["difficulty"],)
-                        ).start()
+                        self.mining_signal.set()
+                case "chain":
+                    print("Hellaur!")
+                    blockchain = Blockchain(
+                        blocks=[PoWBlock.loads(block) for block in message["blockchain"]]
+                    )
+                    logging.debug("Validating blockchain obtained from master")
+                    new = blockchain.validate_chain()
+                    logging.debug("Validating own blockchain")
+                    old = self.blockchain.validate_chain()
 
-                    # Vote on solution (blocking)
-                    case "verify":
-                        self.set_solution(True)
-                        valid = self.blockchain.validate_block(
-                            block=PoWBlock.loads(message["block"]),
-                            difficulty=message["difficulty"],
-                            last_hash=self.blockchain.last_hash,
-                        )
-                        logging.debug(f"Vote on sent solution: {valid}")
-
+                    if len(blockchain) < len(self.blockchain) and old:
+                        logging.debug("Previous chain is longer, sending to master")
                         self.send(
-                            json.dumps(
-                                {"type": "verify", "vote": 1 if valid else 0}
-                            ).encode()
+                            {"type": "chain", "blockchain": self.blockchain.serialize()}
                         )
+                    elif (len(blockchain) > len(self.blockchain) and new) or (
+                        new and not old
+                    ):
+                        logging.debug("New chain is longer, overriding")
+                        self.lock.acquire()
+                        self.blockchain = blockchain
+                        self.lock.release()
 
-                    # Add voted block (blocking)
-                    case "veredict":
-                        logging.debug(f"Received veredict: {message}")
-                        # Append block and tell miner to stop
-                        if message.get("block"):
-                            trs = {hash_transaction(t.data): t.fee for t in self.pool}
-
-                            new_pool = self.blockchain.add_block(
-                                PoWBlock.loads(message.get("block")),
-                                transactions=[t.data for t in self.pool],
-                            )
-
-                            self.pool = [
-                                Transaction(data=t, fee=trs[hash_transaction(t)])
-                                for t in new_pool
-                            ]
-                            self.mining_signal.set()
-
-                        # Consensus was not reached, continue mining
-                        elif message.get("final"):
-                            self.set_solution(False)
-                            self.mining_signal.set()
-
-                    case "close_connection":
-                        logging.debug(f"Master disconnection received")
-                        disconnected = True
-                    case _:
-                        logging.debug(f"Message type not recognized")
-        except Exception as e:
-            logging.error(f"Error: {e}")
-
-        self.conn.close()
+                case "close_connection":
+                    logging.debug(f"Master disconnection received")
+                    disconnected = True
+                case _:
+                    logging.debug(f"Message type not recognized")
 
 
 priv, pub = create_keypair()
 node = PoWNode(pub, priv)
-node.run()
+
+try:
+    node.run()
+except Exception as e:
+    logging.error(f"Error: {e}")
+
+node.conn.close()
