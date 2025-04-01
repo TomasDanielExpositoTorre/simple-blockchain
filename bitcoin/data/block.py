@@ -159,3 +159,23 @@ class PoWBlock:
         header: dict = json.loads(data)
         transactions = header.pop("transactions")
         return PoWBlock(transactions=transactions, header=header)
+
+    def show(self, i: int) -> str:
+        # TODO add transaction representation
+        return (
+            f"#{''.ljust(81,'-')}#\n"
+            f"|  {f'Blockchain Block {i}'.center(77)}  |\n"
+            f"#{''.ljust(81,'-')}#\n"
+            f"|  {'Header'.center(77)}  |\n"
+            f"#{''.ljust(81,'-')}#\n"
+            f"|  {f'Version: {self.header.version}'.ljust(77)}  |\n"
+            f"|  {f'Time: {self.header.time}'.ljust(77)}  |\n"
+            f"|  {f'Difficulty: {self.header.target}'.ljust(77)}  |\n"
+            f"|  {f'Nonce: {self.header.nonce}'.ljust(77)}  |\n"
+            f"|  {f'Parent Hash: {self.header.hash_parent}'.ljust(77)}  |\n"
+            f"|  {f'Merkle Hash: {self.header.hash_merkle}'.ljust(77)}  |\n"
+            f"|  {f'Block  Hash: {self.hash}'.ljust(77)}  |\n"
+            f"#{''.ljust(81,'-')}#\n"
+            f"|  {'Transactions'.center(77)}  |\n"
+            f"#{''.ljust(81,'-')}#\n"
+        )

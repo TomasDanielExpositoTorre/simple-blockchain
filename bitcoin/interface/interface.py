@@ -3,6 +3,7 @@ import math
 import logging
 from bitcoin.interface.daemon import InterfaceDaemon
 from bitcoin.data.block import PoWBlock
+import pydoc
 
 
 class Interface(InterfaceDaemon):
@@ -112,7 +113,10 @@ class Interface(InterfaceDaemon):
                         self.consensus = []
 
                 case "visualize":
-                    pass
+                    if not len(self.blockchain):
+                        print("Blockchain is currently empty.")
+                    else:
+                        pydoc.pager(str(self.blockchain))
                 case "integrity":
                     self.blockchain.validate_chain()
                     self.send_to_all(

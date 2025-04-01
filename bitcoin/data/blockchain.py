@@ -273,3 +273,10 @@ class Blockchain:
         logging.info("All blockchain transactions are valid!")
 
         return True
+
+    def __str__(self):
+        rep = ""
+        for i, block in enumerate(self.blocks):
+            rep += block.show(i)
+            rep += "\n\n"
+        return rep

@@ -263,7 +263,6 @@ class PoWNode:
                         self.set_solution(False)
                         self.mining_signal.set()
                 case "chain":
-                    print("Hellaur!")
                     blockchain = Blockchain(
                         blocks=[PoWBlock.loads(block) for block in message["blockchain"]]
                     )
