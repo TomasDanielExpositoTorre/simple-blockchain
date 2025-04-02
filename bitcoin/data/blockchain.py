@@ -2,7 +2,7 @@ import hashlib
 import datetime
 import json
 from dataclasses import asdict, dataclass, field
-from bitcoin.data.crypto import hash_transaction
+import bitcoin.data.crypto as crypto
 from bitcoin.data.block import PoWBlock
 import logging
 
@@ -49,7 +49,7 @@ class Blockchain:
         """
         self.blocks.append(block)
 
-        hashes = {hash_transaction(t): i for i, t in enumerate(transactions)}
+        hashes = {crypto.hash_transaction(t): i for i, t in enumerate(transactions)}
         spent = dict()
 
         for txid, t in block.transactions.items():
@@ -108,7 +108,7 @@ class Blockchain:
 
             # Extract data from the input
             txid, out = i["tx_id"], i["v_out"]
-            pub, sig = load_pubkey(i["key"]), load_signature(i["signature"])
+            pub, sig = crypto.load_pubkey(i["key"]), crypto.load_signature(i["signature"])
             outpoint = f"{txid}:{out}"
 
             # Look up output in unspent set
@@ -125,7 +125,7 @@ class Blockchain:
             tx: dict = self.blocks[utxo.block_id].transactions[txid]["outputs"][out]
 
             # Compare public keys
-            keyhash = hash_pubkey(pub)
+            keyhash = crypto.hash_pubkey(pub)
             if keyhash != tx["keyhash"]:
                 logging.debug(f"Invalid public key for outpoint {outpoint}")
                 return False
@@ -139,7 +139,7 @@ class Blockchain:
                 d = tx["data"]
 
             # Compare signature for ownership
-            if not verify(pub=pub, signature=sig, data=d):
+            if not crypto.verify(pub=pub, signature=sig, data=d):
                 logging.debug(f"Invalid ownership for outpoint {outpoint}")
                 return False
 
@@ -199,15 +199,15 @@ class Blockchain:
 
         # Validate individual transactions
         for txid, t in block.transactions.items():
-            if hash_transaction(t) != txid:
+            if crypto.hash_transaction(t) != txid:
                 logging.debug(
                     "Transaction was tampered"
                     + f"\n\texpected hash:{txid}"
-                    + f"\n\tgot: {hash_transaction(t)}"
+                    + f"\n\tgot: {crypto.hash_transaction(t)}"
                 )
                 return False
 
-            if t.get("coinbase") and fee != 0:
+            if t.get("coinbase") and (fee or len(t["outputs"]) != 1):
                 logging.debug("More than one coinbase transaction present in the block")
                 return False
             elif t.get("coinbase"):

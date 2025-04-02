@@ -40,6 +40,9 @@ class InterfaceDaemon:
         # Own blockchain
         self.blockchain = Blockchain(blocks=[])
 
+        # Keys for creating transactions
+        self.keys = {}
+
     @property
     def voting_finished(self) -> bool:
         """
@@ -60,7 +63,11 @@ class InterfaceDaemon:
         try:
             with self.lock:
                 if len(self.blockchain):
-                    conn.sendall(json.dumps({"type": "chain", "blockchain": self.blockchain.serialize()}).encode())
+                    conn.sendall(
+                        json.dumps(
+                            {"type": "chain", "blockchain": self.blockchain.serialize()}
+                        ).encode()
+                    )
 
             while True:
 
@@ -97,14 +104,13 @@ class InterfaceDaemon:
                             )
 
                             if len(blockchain) > len(self.blockchain):
-                                self.lock.acquire()
                                 self.blockchain = (
                                     blockchain
                                     if blockchain.validate_chain()
                                     else self.blockchain
                                 )
-                                self.lock.release()
-
+                        case "keys":
+                            self.keys[message["priv"]] = message["pub"]
                         case _:
                             print(f"Unsupported message type: {_}")
         except Exception as e:

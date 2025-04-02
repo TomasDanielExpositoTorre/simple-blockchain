@@ -40,6 +40,19 @@ def load_pubkey(pub: str) -> rsa.RSAPublicKey:
     return serialization.load_der_public_key(bytes.fromhex(pub))
 
 
+def dump_privkey(priv: rsa.RSAPrivateKey) -> str:
+    key_bytes = priv.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    return key_bytes.hex()
+
+
+def load_privkey(priv: str) -> rsa.RSAPrivateKey:
+    return serialization.load_der_private_key(bytes.fromhex(priv), password=None)
+
+
 def load_signature(data: str):
     return bytes.fromhex(data)
 

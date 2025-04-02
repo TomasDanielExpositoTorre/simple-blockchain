@@ -6,14 +6,7 @@ node.
 from bitcoin.data.blockchain import Blockchain
 from bitcoin.data.block import PoWBlock
 from dataclasses import dataclass
-from bitcoin.data.crypto import (
-    load_pubkey,
-    load_signature,
-    hash_pubkey,
-    verify,
-    hash_transaction,
-    create_keypair,
-)
+import bitcoin.data.crypto as crypto
 import logging
 import threading
 import socket
@@ -106,9 +99,9 @@ class PoWNode:
         self.solution_found = value
         self.lock.release()
 
-    def send(self, data: bytes):
+    def send(self, data: dict):
         with self.lock:
-            self.conn.sendall(data)
+            self.conn.sendall(json.dumps(data).encode())
 
     ###########################################################################
     # -                           CALLBACK METHODS                           -#
@@ -129,7 +122,9 @@ class PoWNode:
         self.pool.append(
             Transaction(
                 data={
-                    "outputs": [{"amount": fee, "keyhash": hash_pubkey(self.pub)}],
+                    "outputs": [
+                        {"amount": fee, "keyhash": crypto.hash_pubkey(self.pub)}
+                    ],
                     "coinbase": True,
                 },
                 fee=0,
@@ -149,11 +144,7 @@ class PoWNode:
             # Hashcash PoW
             if int(block.hash, base=16) <= target:
                 # Send found solution
-                self.send(
-                    json.dumps(
-                        {"type": "solution", "block": PoWBlock.dumps(block)}
-                    ).encode()
-                )
+                self.send({"type": "solution", "block": PoWBlock.dumps(block)})
                 logging.debug(f"Solution found! {PoWBlock.dumps(block)}")
                 found = True
 
@@ -212,7 +203,6 @@ class PoWNode:
                         f"Incoming transaction from master: {message['transaction']}"
                     )
                     self.add_transaction(transaction=json.loads(message["transaction"]))
-
                 # Mine current transactions (non-blocking)
                 case "mine":
                     logging.debug(
@@ -234,18 +224,16 @@ class PoWNode:
                     )
                     logging.debug(f"Vote on sent solution: {valid}")
 
-                    self.send(
-                        json.dumps(
-                            {"type": "verify", "vote": 1 if valid else 0}
-                        ).encode()
-                    )
+                    self.send({"type": "verify", "vote": 1 if valid else 0})
 
                 # Add voted block (blocking)
                 case "veredict":
                     logging.debug(f"Received veredict: {message}")
                     # Append block and tell miner to stop
                     if message.get("block"):
-                        trs = {hash_transaction(t.data): t.fee for t in self.pool}
+                        trs = {
+                            crypto.hash_transaction(t.data): t.fee for t in self.pool
+                        }
 
                         new_pool = self.blockchain.add_block(
                             PoWBlock.loads(message.get("block")),
@@ -253,9 +241,11 @@ class PoWNode:
                         )
 
                         self.pool = [
-                            Transaction(data=t, fee=trs[hash_transaction(t)])
+                            Transaction(data=t, fee=trs[crypto.hash_transaction(t)])
                             for t in new_pool
                         ]
+
+
                         self.mining_signal.set()
 
                     # Consensus was not reached, continue mining
@@ -264,7 +254,9 @@ class PoWNode:
                         self.mining_signal.set()
                 case "chain":
                     blockchain = Blockchain(
-                        blocks=[PoWBlock.loads(block) for block in message["blockchain"]]
+                        blocks=[
+                            PoWBlock.loads(block) for block in message["blockchain"]
+                        ]
                     )
                     logging.debug("Validating blockchain obtained from master")
                     new = blockchain.validate_chain()
@@ -287,11 +279,19 @@ class PoWNode:
                 case "close_connection":
                     logging.debug(f"Master disconnection received")
                     disconnected = True
+                case "keys":
+                    self.send(
+                        {
+                            "type": "keys",
+                            "priv": crypto.dump_privkey(self.priv),
+                            "pub": crypto.dump_pubkey(self.pub),
+                        }
+                    )
                 case _:
                     logging.debug(f"Message type not recognized")
 
 
-priv, pub = create_keypair()
+priv, pub = crypto.create_keypair()
 node = PoWNode(pub, priv)
 
 try:

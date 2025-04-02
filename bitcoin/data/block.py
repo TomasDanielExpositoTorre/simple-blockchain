@@ -7,8 +7,7 @@ import hashlib
 import datetime
 import json
 from dataclasses import asdict, dataclass
-from bitcoin.data.crypto import hash_transaction
-
+import bitcoin.data.crypto as crypto
 
 @dataclass
 class BlockHeader:
@@ -70,7 +69,7 @@ class PoWBlock:
                 target=target,
                 nonce=0,
             )
-            self.transactions = {hash_transaction(t): t for t in transactions}
+            self.transactions = {crypto.hash_transaction(t): t for t in transactions}
         else:
             self.header = BlockHeader(**header)
             self.transactions = transactions
