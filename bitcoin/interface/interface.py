@@ -5,7 +5,7 @@ from bitcoin.interface.daemon import InterfaceDaemon
 from bitcoin.data.block import PoWBlock
 import bitcoin.data.crypto as crypto
 import pydoc
-
+import os
 
 class Interface(InterfaceDaemon):
     def __init__(self, host="localhost", port=65432, base=2):
@@ -142,6 +142,7 @@ class Interface(InterfaceDaemon):
             "acquire keys": self.acquire_keys,
             "visualize keys": self.show_keys,
             "exit": self.cleanup,
+            "clear": lambda: os.system('cls' if os.name == 'nt' else 'clear')
         }
         commands = "List of available commands:\n\t" + "\n\t".join(k for k in handlers)
 

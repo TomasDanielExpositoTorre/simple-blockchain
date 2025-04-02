@@ -9,6 +9,7 @@ import json
 from dataclasses import asdict, dataclass
 import bitcoin.data.crypto as crypto
 
+
 @dataclass
 class BlockHeader:
     """
@@ -161,20 +162,53 @@ class PoWBlock:
 
     def show(self, i: int) -> str:
         # TODO add transaction representation
-        return (
-            f"#{''.ljust(81,'-')}#\n"
-            f"|  {f'Blockchain Block {i}'.center(77)}  |\n"
-            f"#{''.ljust(81,'-')}#\n"
-            f"|  {'Header'.center(77)}  |\n"
-            f"#{''.ljust(81,'-')}#\n"
-            f"|  {f'Version: {self.header.version}'.ljust(77)}  |\n"
-            f"|  {f'Time: {self.header.time}'.ljust(77)}  |\n"
-            f"|  {f'Difficulty: {self.header.target}'.ljust(77)}  |\n"
-            f"|  {f'Nonce: {self.header.nonce}'.ljust(77)}  |\n"
-            f"|  {f'Parent Hash: {self.header.hash_parent}'.ljust(77)}  |\n"
-            f"|  {f'Merkle Hash: {self.header.hash_merkle}'.ljust(77)}  |\n"
-            f"|  {f'Block  Hash: {self.hash}'.ljust(77)}  |\n"
-            f"#{''.ljust(81,'-')}#\n"
-            f"|  {'Transactions'.center(77)}  |\n"
-            f"#{''.ljust(81,'-')}#\n"
-        )
+        border = f"#{''.ljust(81,'-')}#\n"
+        rep = border + f"|  {f'Blockchain Block {i}'.center(77)}  |\n" + border
+
+        # Block Header
+        rep += f"|  {'Header'.center(77)}  |\n" + border
+        rep += f"|  {f'Version: {self.header.version}'.ljust(77)}  |\n"
+        rep += f"|  {f'Time: {self.header.time}'.ljust(77)}  |\n"
+        rep += f"|  {f'Difficulty: {self.header.target}'.ljust(77)}  |\n"
+        rep += f"|  {f'Nonce: {self.header.nonce}'.ljust(77)}  |\n"
+        rep += f"|  {f'Parent Hash: {self.header.hash_parent}'.ljust(77)}  |\n"
+        rep += f"|  {f'Merkle Hash: {self.header.hash_merkle}'.ljust(77)}  |\n"
+        rep += f"|  {f'Block  Hash: {self.hash}'.ljust(77)}  |\n"
+
+        # Transactions
+        rep += border + f"|  {'Transactions'.center(77)}  |\n" + border
+        for txid, t in self.transactions.items():
+            rep += f"|  {f'Hash: {txid}'.ljust(77)}  |\n"
+
+            if t.get("inputs"):
+                rep += f"|  {f' '.ljust(77)}  |\n"
+                rep += f"|  {'Inputs'.center(77)}  |\n"
+                for i in t["inputs"]:
+                    tx_id, vout, key, signature = (
+                        i["tx_id"],
+                        i["v_out"],
+                        i["key"],
+                        i["signature"],
+                    )
+                    rep += f"|  {f'TXID: {tx_id}'.ljust(77)}  |\n"
+                    rep += f"|  {f'VOUT: {vout}'.ljust(77)}  |\n"
+                    rep += f"|  {f'Owner: {key}'.ljust(77)}  |\n"
+                    rep += f"|  {f'Signature: {signature}'.ljust(77)}  |\n"
+                    rep += f"|  {f' '.ljust(77)}  |\n"
+                    
+
+            if t.get("outputs"):
+                rep += f"|  {f' '.ljust(77)}  |\n"
+                rep += f"|  {'Outputs'.ljust(77)}  |\n"
+                for o in t["outputs"]:
+                    keyhash, amount, data = o["keyhash"], o.get("amount"), o.get("data")
+                    rep += f"|      {f'Owner: {keyhash}'.ljust(73)}  |\n"
+                    rep = (
+                        rep + f"|      {f'BTC: {amount}'.ljust(73)}  |\n"
+                        if amount
+                        else rep + f"|      {f'Data: {data}'.ljust(73)}  |\n"
+                    )
+                    rep += f"|  {f' '.ljust(77)}  |\n"
+        rep += border
+                    
+        return rep
