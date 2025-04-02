@@ -1,3 +1,7 @@
+"""
+This module defines the structure and methods required for a PoW blockchain.
+"""
+
 import hashlib
 import datetime
 import json
@@ -23,21 +27,39 @@ class UTXO:
 
 @dataclass
 class Blockchain:
+    """
+    Dataclass representation for the entire blockchain, with all validated
+    blocks, the hashcash problem reward and a set of unspent transactions.
+    """
+
     blocks: list[PoWBlock]
     utxo_set: dict[str, UTXO] = field(default_factory=dict)
     reward: int = 3.125
 
     def __len__(self) -> int:
+        """
+        Returns the current length of the chain.
+        """
         return len(self.blocks)
 
     @property
     def last_hash(self) -> str:
         """
-        Returns the hash of the last block in the chain
+        Returns the hash of the last block in the chain.
         """
         return self.blocks[-1].hash if len(self.blocks) else GENESIS_HASH
 
     def get_input(self, txid, v_out):
+        """
+        Wrapper function for obtaining an unspent transaction outpoint.
+
+        Args:
+            txid (str): Transaction hash value.
+            v_out (int): Unspent transaction output index.
+
+        Returns:
+            int|str
+        """
         if not self.utxo_set.get(txid):
             logging.error(f"Invalid transaction identifier: {txid}")
             return None
@@ -52,17 +74,28 @@ class Blockchain:
             return None
 
         txo = self.blocks[utxo.block_id].transactions[txid]["outputs"][v_out]
-        return txo.get("amount", txo.get("data"))
+        return str(txo.get("amount", txo.get("data")))
 
     def serialize(self) -> list[str]:
+        """
+        Serializes the blockchain.
+
+        Returns:
+            list: Serialized blocks.
+        """
         return [PoWBlock.dumps(block) for block in self.blocks]
 
     def add_block(self, block: PoWBlock, transactions: list[dict]):
         """
-        Add a block to the chain updating all required fees
+        Wrapper method to append a validated block to the chain.
 
         Args:
             block (PoWBlock): Mined block.
+            transactions (list[dict]): transaction pool from the caller.
+
+        Returns:
+            dict: New pool without the transactions already included on the
+                block.
         """
         self.blocks.append(block)
 
@@ -85,13 +118,15 @@ class Blockchain:
             # Remove spent transactions inputs from utxo set
             for txid, vouts in spent.items():
                 if self.utxo_set.get(txid):
-                    self.utxo_set[txid].v_outs = list(set(self.utxo_set[txid].v_outs) - set(vouts))
+                    self.utxo_set[txid].v_outs = list(
+                        set(self.utxo_set[txid].v_outs) - set(vouts)
+                    )
                     if len(self.utxo_set[txid].v_outs):
                         self.utxo_set.pop(txid)
 
         # Add transaction outputs to the uxto set
         for txid, vouts in block.outpoints.items():
-            self.utxo_set[txid] = UTXO(v_outs=vouts, block_id=len(self.blocks)-1)
+            self.utxo_set[txid] = UTXO(v_outs=vouts, block_id=len(self.blocks) - 1)
 
         return transactions
 
@@ -99,17 +134,17 @@ class Blockchain:
         """
         Validates the integrity of a transaction, used either when adding
         transactions to the pool, or during the validation step after
-        a block has been found.
+        a solution has been received.
 
         This method should not be called to validate the coinbase transaction
         appended by the winning miner.
 
         Args:
             transaction (dict): Blockchain transaction following the expected
-            format.
+            format in bitcoin/transaction.json.
 
         Returns:
-            False on an invalid transaction, or the resulting fee otherwise.
+            False on an invalid transaction, the resulting fee otherwise.
         """
         total = 0
         data = []
@@ -123,14 +158,7 @@ class Blockchain:
             )
             return False
 
-        if not transaction.get("inputs"):
-            logging.debug(
-                "Transaction must have inputs"
-                + f"\n\texpected: 1"
-                + f"\n\tgot: {transaction['version']}"
-            )
-
-        for i in transaction["inputs"]:
+        for i in transaction.get("inputs"):
 
             # Extract data from the input
             txid, out = i["tx_id"], i["v_out"]
@@ -139,7 +167,7 @@ class Blockchain:
             )
             outpoint = f"{txid}:{out}"
 
-            # Look up output in unspent set
+            # Look up outpoint in unspent set
             if outpoint in inpairs:
                 logging.debug(f"The outpoint {outpoint} was spent twice")
                 return False
@@ -171,9 +199,15 @@ class Blockchain:
                 logging.debug(f"Invalid ownership for outpoint {outpoint}")
                 return False
 
-        # Check resulting fee and p ownership transfer
-        total -= sum([t.get("amount", 0) for t in transaction.get("outputs", [{"amount": 0}])])
-        outs = [t["data"] for t in transaction.get("outputs", [{"amount": 0}]) if t.get("data")]
+        # Check resulting fee and ownership transfer
+        total -= sum(
+            [t.get("amount", 0) for t in transaction.get("outputs", [{"amount": 0}])]
+        )
+        outs = [
+            t["data"]
+            for t in transaction.get("outputs", [{"amount": 0}])
+            if t.get("data")
+        ]
 
         if total < 0:
             logging.debug(f"Invalid transaction fee: {total}")
@@ -190,11 +224,17 @@ class Blockchain:
     def validate_block(self, block: PoWBlock, difficulty: str, last_hash: str):
         """
         Validates a block received from other nodes and appends it to own
-        blockchain after consensus has been reached.
+        blockchain after consensus has been reached. This method can be called
+        for appending a new block to an existing blockchain or for integrity
+        validation.
 
         Args:
-            message (str): json-format containing the block to validate and
-                the expected difficulty.
+            block (PoWBlock): Block data to validate.
+            difficulty (str): Difficulty value sent from the main server.
+            last_hash (str): parent block hash.
+
+        Returns:
+            bool: True if the block information is valid, False otherwise.
         """
 
         fee, total = 0, 0
@@ -261,8 +301,12 @@ class Blockchain:
     def validate_chain(self) -> bool:
         """
         Verifies the integrity of the chain and rewrites the utxo chain.
+
+        Returns:
+            bool: True if the chain is valid, False otherwise.
         """
 
+        # An empty chain is always valid
         if not len(self.blocks):
             return True
 
@@ -284,7 +328,8 @@ class Blockchain:
             ):
                 return False
 
-            spent = {}
+            # Store all spent transactions
+            spent = dict()
             for t in block.transactions.values():
                 for i in t.get("inputs", []):
                     spent.setdefault(i["tx_id"], []).append(i["v_out"])
@@ -292,7 +337,9 @@ class Blockchain:
             # Remove spent transactions inputs from utxo set
             for txid, vouts in spent.items():
                 if self.utxo_set.get(txid):
-                    self.utxo_set[txid].v_outs = list(set(self.utxo_set[txid].v_outs) - set(vouts))
+                    self.utxo_set[txid].v_outs = list(
+                        set(self.utxo_set[txid].v_outs) - set(vouts)
+                    )
                     if len(self.utxo_set[txid].v_outs):
                         self.utxo_set.pop(txid)
 
@@ -300,12 +347,15 @@ class Blockchain:
             for txid, vouts in block.outpoints.items():
                 self.utxo_set[txid] = UTXO(v_outs=vouts, block_id=i)
 
-
         logging.info("All blockchain transactions are valid!")
 
         return True
 
     def __str__(self):
+        """
+        Returns a string representation for the chain, composed of all
+        existing blocks.
+        """
         rep = ""
         for i, block in enumerate(self.blocks):
             rep += block.show(i)

@@ -84,22 +84,34 @@ class PoWNode:
 
     def get_solution(self) -> bool:
         """
-        Thread-safe wrapper to check if a solution has been found in the chain
+        Thread-safe wrapper to check if a solution has been found in the chain.
+
+        Return:
+            bool: Solution found status.
         """
         self.lock.acquire()
         sol = self.solution_found
         self.lock.release()
         return sol
 
-    def set_solution(self, value):
+    def set_solution(self, value: bool):
         """
         Thread-safe wrapper to set if a solution has been found in the chain
+
+        Args:
+            value (bool): Setter value.
         """
         self.lock.acquire()
         self.solution_found = value
         self.lock.release()
 
     def send(self, data: dict):
+        """
+        Thread-safe sendall wrapper.
+
+        Args:
+            data (dict): Data to send.
+        """
         with self.lock:
             self.conn.sendall(json.dumps(data).encode())
 
@@ -131,7 +143,7 @@ class PoWNode:
             )
         )
 
-        # Create the block and do the Proof-of-Work
+        # Create the block from transaction pool (no sorting or limiting)
         block = PoWBlock(
             transactions=[t.data for t in self.pool],
             parent=self.blockchain.last_hash,
@@ -139,9 +151,10 @@ class PoWNode:
         )
         target = block.target_value
 
+        # Apply the Proof-of-Work
         while not found:
 
-            # Hashcash PoW
+            # Hashcash
             if int(block.hash, base=16) <= target:
                 # Send found solution
                 self.send({"type": "solution", "block": PoWBlock.dumps(block)})
@@ -203,6 +216,7 @@ class PoWNode:
                         f"Incoming transaction from master: {message['transaction']}"
                     )
                     self.add_transaction(transaction=message["transaction"])
+
                 # Mine current transactions (non-blocking)
                 case "mine":
                     logging.debug(
@@ -226,7 +240,7 @@ class PoWNode:
 
                     self.send({"type": "verify", "vote": 1 if valid else 0})
 
-                # Add voted block (blocking)
+                # Handle consensus response (blocking)
                 case "veredict":
                     logging.debug(f"Received veredict: {message}")
                     # Append block and tell miner to stop
@@ -245,29 +259,33 @@ class PoWNode:
                             for t in new_pool
                         ]
 
-
                         self.mining_signal.set()
 
                     # Consensus was not reached, continue mining
                     elif message.get("final"):
                         self.set_solution(False)
                         self.mining_signal.set()
+
+                # Compare received blockchain with own
                 case "chain":
                     blockchain = Blockchain(
-                        blocks=[
-                            PoWBlock.loads(block) for block in message["blockchain"]
-                        ]
+                        blocks=[PoWBlock.loads(b) for b in message["blockchain"]]
                     )
+
                     logging.debug("Validating blockchain obtained from master")
                     new = blockchain.validate_chain()
+
                     logging.debug("Validating own blockchain")
                     old = self.blockchain.validate_chain()
 
+                    # Override caller's chain
                     if len(blockchain) < len(self.blockchain) and old:
                         logging.debug("Previous chain is longer, sending to master")
                         self.send(
                             {"type": "chain", "blockchain": self.blockchain.serialize()}
                         )
+
+                    # Override own chain
                     elif (len(blockchain) > len(self.blockchain) and new) or (
                         new and not old
                     ):
@@ -276,9 +294,7 @@ class PoWNode:
                         self.blockchain = blockchain
                         self.lock.release()
 
-                case "close_connection":
-                    logging.debug(f"Master disconnection received")
-                    disconnected = True
+                # Share keys with master
                 case "keys":
                     self.send(
                         {
@@ -287,6 +303,12 @@ class PoWNode:
                             "pub": crypto.dump_pubkey(self.pub),
                         }
                     )
+
+                # Close connection and exit gracefully
+                case "close_connection":
+                    logging.debug(f"Master disconnection received")
+                    disconnected = True
+
                 case _:
                     logging.debug(f"Message type not recognized")
 

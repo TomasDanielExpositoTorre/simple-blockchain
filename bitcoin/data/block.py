@@ -6,8 +6,8 @@ block.
 import hashlib
 import datetime
 import json
-from dataclasses import asdict, dataclass
 import bitcoin.data.crypto as crypto
+from dataclasses import asdict, dataclass
 
 
 @dataclass
@@ -24,6 +24,9 @@ class BlockHeader:
     nonce: int
 
     def __repr__(self):
+        """
+        Returns a string representation of this header for hashing.
+        """
         return (
             str(self.version)
             + self.hash_parent
@@ -89,23 +92,34 @@ class PoWBlock:
 
     @property
     def target_value(self) -> int:
+        """
+        Returns a numeric representation of the mining difficulty for this
+        block.
+        """
         return int(self.header.target[2:], base=16) * (
             256 ** (int(self.header.target[0:2], base=16) - 3)
         )
 
     @property
     def outpoints(self):
+        """
+        Returns a list with all the resulting spendable outpoints for this
+        block.
+        """
         return {
             txid: list(range(len(t.get("outputs", []))))
             for txid, t in self.transactions.items()
         }
 
     @classmethod
-    def merkle_root(cls, transactions) -> str:
+    def merkle_root(cls, transactions: dict | list) -> str:
         """
         Computes the merkle root hash for the set of transactions in the
         block.
 
+        Args:
+            transactions (dict|list): transactions for which the merkle root is
+                computed.
         Returns:
             str: Double SHA256 hash value at the root of the tree.
         """
@@ -161,6 +175,16 @@ class PoWBlock:
         return PoWBlock(transactions=transactions, header=header)
 
     def show(self, i: int) -> str:
+        """
+        Creates a representation of this chain to show on the command line.
+        It is expected that the output can show up to 83 characters per row.
+
+        Args:
+            i (int): Index of block in the blockchain.
+
+        Returns:
+            str: Formatted block representation.
+        """
         border = f"#{''.ljust(81,'-')}#\n"
         rep = border + f"|  {f'Blockchain Block {i}'.center(77)}  |\n" + border
 
@@ -194,8 +218,8 @@ class PoWBlock:
                     rep += f"|      {f'VOUT: {vout}'.ljust(73)}  |\n"
                     rep += f"|      {f'Owner:     {key[0:32]}...'.ljust(73)}  |\n"
                     rep += f"|      {f'Signature: {signature[0:32]}...'.ljust(73)}  |\n"
-                    
-                    if i_ < len(t["inputs"]) - 1: 
+
+                    if i_ < len(t["inputs"]) - 1:
                         rep += f"|  {f' '.ljust(77)}  |\n"
 
             if t.get("outputs"):
@@ -208,13 +232,16 @@ class PoWBlock:
                     rep = (
                         rep + f"|      {f'BTC: {amount}'.ljust(73)}  |\n"
                         if amount
-                        else rep + f"|      {f'Data: {data[0:32]}...'.ljust(73)}  |\n" if len(data) > 32
-                        else rep + f"|      {f'Data: {data}'.ljust(73)}  |\n"
+                        else (
+                            rep + f"|      {f'Data: {data[0:32]}...'.ljust(73)}  |\n"
+                            if len(data) > 32
+                            else rep + f"|      {f'Data: {data}'.ljust(73)}  |\n"
+                        )
                     )
                     rep += f"|  {f' '.ljust(77)}  |\n"
             if val < len(self.transactions) - 1:
                 rep += f"|{''.ljust(81,'~')}|\n"
-        
+
         rep += border
 
         return rep

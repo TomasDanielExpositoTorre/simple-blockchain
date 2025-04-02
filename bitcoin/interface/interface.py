@@ -1,3 +1,7 @@
+"""
+Main entry script for the application which handles user input.
+"""
+
 import threading
 import math
 import logging
@@ -10,6 +14,10 @@ import re
 
 
 class Interface(InterfaceDaemon):
+    """
+    CLI Interface class.
+    """
+
     def __init__(self, host="localhost", port=65432, base=2):
         """
         Constructor method for this class.
@@ -19,7 +27,7 @@ class Interface(InterfaceDaemon):
     @property
     def difficulty(self):
         """
-        Adaptive difficulty value depending on the number of nodes present in the chain
+        Adaptive difficulty value depending on the number of nodes present in the chain.
         """
         with self.lock:
             diff = hex(
@@ -30,12 +38,18 @@ class Interface(InterfaceDaemon):
 
     @property
     def solutions(self):
+        """
+        Thread-safe wrapper to access the received solution queue.
+        """
         self.lock.acquire()
         solution_queue = self.solution_queue
         self.lock.release()
         return solution_queue
 
     def mine(self):
+        """
+        Callback function to start the block mining process accross all nodes.
+        """
         diff = self.difficulty
         logging.debug(f"Computed difficulty: {diff}")
         self.idle.clear()
@@ -90,17 +104,28 @@ class Interface(InterfaceDaemon):
                     self.consensus = []
 
     def visualize(self):
+        """
+        Callback method to visualize the blockchain in a linux less-like interface.
+        """
         if not len(self.blockchain):
             print("Blockchain is currently empty.")
             return
 
+        # Show the data
         pydoc.pager(str(self.blockchain))
 
     def integrity(self):
+        """
+        Callback method to validate the integrity of the chain in the main
+        server and all nodes.
+        """
         self.blockchain.validate_chain()
         self.send_to_all({"type": "chain", "blockchain": self.blockchain.serialize()})
 
     def cleanup(self):
+        """
+        Callback method to exit the application gracefully.
+        """
         self.send_to_all({"type": "close_connection"})
         with self.lock:
             for node in self.nodes:
@@ -108,13 +133,22 @@ class Interface(InterfaceDaemon):
         exit()
 
     def acquire_keys(self):
+        """
+        Callback method to receive keypairs from all connected nodes, to create
+        and test transactions.
+        """
         self.send_to_all({"type": "keys"})
 
     def show_keys(self):
+        """
+        Callback method to visualize acquired keys in a linux less-like
+        interface.
+        """
         if not len(self.keys):
             print("No keys acquired yet.")
             return
 
+        # TUI text formatting
         border = f"#{''.ljust(81,'-')}#\n"
         data = border + f"|  {f'Public Key Visualizer'.center(77)}  |\n" + border
 
@@ -123,9 +157,15 @@ class Interface(InterfaceDaemon):
             data += f"|  {f'Keyhash: {crypto.hash_pubkey(crypto.load_pubkey(pub))}'.ljust(77)}  |\n"
             data += border
 
+        # Show the data
         pydoc.pager(data)
 
     def transaction_creator(self):
+        """
+        Callback function to create transactions interactively.
+        """
+
+        # Load keypairs to use during transactions
         with self.lock:
             keys = [(priv, pub) for priv, pub in self.keys.items()]
 
@@ -136,19 +176,24 @@ class Interface(InterfaceDaemon):
         transaction = {"version": 1}
         done = False
         key = None
-        print("Transaction Creator")
+
+        print("\nTransaction Creator")
         print("Available keys")
         for i, (priv, pub) in enumerate(keys):
             print(f"{i}: {crypto.hash_pubkey(crypto.load_pubkey(pub))}")
 
         while not done:
-            cmd = input("[trc] Enter a command: ").strip().lower()
+            cmd = input("[transaction-creator] Enter a command: ").strip().lower()
 
             match cmd:
+
+                # Print available commands
                 case "help":
                     print(
                         "Available transaction commands:\n\tinput.\n\toutput.\n\tchain.\n\tkeys."
                     )
+
+                # Create an input for the transaction
                 case "input":
                     i = int(input("Select an origin key index: "))
                     if not (0 <= i < len(keys)):
@@ -169,10 +214,12 @@ class Interface(InterfaceDaemon):
                             "v_out": vout,
                             "key": key[1],
                             "signature": crypto.sign(
-                                priv=crypto.load_privkey(key[0]), data=str(data)
+                                priv=crypto.load_privkey(key[0]), data=data
                             ),
                         }
                     )
+
+                # Create an output for the transaction
                 case "output":
                     i = int(input("Select a destination key index: "))
                     if not (0 <= i < len(keys)):
@@ -195,10 +242,17 @@ class Interface(InterfaceDaemon):
                         }
                     )
 
+                # Visualize the chain to obtain hashes
                 case "chain":
                     self.visualize()
+
+                # Visualize all available keys
                 case "keys":
                     self.show_keys()
+
+                # Clear the screen
+                case "clear":
+                    os.system("cls" if os.name == "nt" else "clear")
                 case "done":
                     done = True
 
@@ -217,6 +271,8 @@ class Interface(InterfaceDaemon):
         server_thread.start()
 
         self.idle.set()
+
+        # Currently supported commands
         handlers = {
             "transaction": self.transaction_creator,
             "mine": self.mine,
@@ -227,9 +283,9 @@ class Interface(InterfaceDaemon):
             "exit": self.cleanup,
             "clear": lambda: os.system("cls" if os.name == "nt" else "clear"),
         }
-        commands = "List of available commands:\n\t" + "\n\t".join(k for k in handlers)
-
-        handlers["help"] = lambda: print(commands)
+        handlers["help"] = lambda: print(
+            "List of available commands:\n\t" + "\n\t".join(k for k in handlers)
+        )
 
         print("Simple Blockchain Simulator")
 

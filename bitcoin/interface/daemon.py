@@ -1,3 +1,7 @@
+"""
+Module that handles messages received from miner nodes.
+"""
+
 import socket
 import threading
 import json
@@ -16,6 +20,9 @@ logging.basicConfig(
 
 
 class InterfaceDaemon:
+    """
+    Receiver interface class, which runs as a daemon thread from the main interface.
+    """
     def __init__(self, host="localhost", port=65432, base=2):
         """
         Constructor method for this class.
@@ -46,7 +53,10 @@ class InterfaceDaemon:
     @property
     def voting_finished(self) -> bool:
         """
-        Checks if voting is currently finished.
+        Checks if the voting process for a solution finished.
+
+        Returns:
+            bool: Vote status.
         """
         return len(self.consensus) == len(self.nodes) or sum(
             self.consensus
@@ -61,6 +71,7 @@ class InterfaceDaemon:
             addr: Connection address
         """
         try:
+            # Send a blockchain copy to new nodes
             with self.lock:
                 if len(self.blockchain):
                     conn.sendall(
@@ -77,7 +88,7 @@ class InterfaceDaemon:
                 with self.lock:
                     match message.get("type"):
 
-                        # Handle received solutions when expecting to vote
+                        # Handle received solutions before a vote is opened
                         case "solution":
                             if self.idle.is_set() or self.voting_started.is_set():
                                 continue
@@ -86,7 +97,7 @@ class InterfaceDaemon:
                             self.solution_queue.append(message["block"])
                             self.voting_started.set()
 
-                        # Handle received votes
+                        # Handle received votes for a solution
                         case "verify":
                             if not self.voting_started.is_set():
                                 continue
@@ -95,6 +106,8 @@ class InterfaceDaemon:
 
                             if self.voting_finished:
                                 self.voting_over.set()
+
+                        # Handle receiving a blockchain from a node
                         case "chain":
                             blockchain = Blockchain(
                                 blocks=[
@@ -109,6 +122,8 @@ class InterfaceDaemon:
                                     if blockchain.validate_chain()
                                     else self.blockchain
                                 )
+                        
+                        # Handle receiving keypairs from a node
                         case "keys":
                             self.keys[message["priv"]] = message["pub"]
                         case _:
@@ -118,6 +133,7 @@ class InterfaceDaemon:
 
         logging.debug(f"Node at {addr} disconnected.")
 
+        # Close connection
         with self.lock:
             if conn in self.nodes:
                 self.nodes.remove(conn)
