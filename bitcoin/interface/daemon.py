@@ -23,6 +23,7 @@ class InterfaceDaemon:
     """
     Receiver interface class, which runs as a daemon thread from the main interface.
     """
+
     def __init__(self, host="localhost", port=65432, base=2):
         """
         Constructor method for this class.
@@ -122,16 +123,16 @@ class InterfaceDaemon:
                                     if blockchain.validate_chain()
                                     else self.blockchain
                                 )
-                        
+
                         # Handle receiving keypairs from a node
                         case "keys":
                             self.keys[message["priv"]] = message["pub"]
                         case _:
-                            print(f"Unsupported message type: {_}")
+                            print("Unsupported message type")
         except Exception as e:
-            logging.error(f"Connection error with {addr}: {e}")
+            logging.error("Connection error with %s: %s", addr, e)
 
-        logging.debug(f"Node at {addr} disconnected.")
+        logging.debug("Node at %s disconnected.", addr)
 
         # Close connection
         with self.lock:
@@ -147,16 +148,16 @@ class InterfaceDaemon:
         server_socket.bind((self.host, self.port))
         server_socket.listen()
 
-        logging.debug(f"Master receiving data on {self.host}:{self.port}")
+        logging.debug("Master receiving data on %s:%s", self.host, self.port)
 
         while True:
             conn, addr = server_socket.accept()
-            logging.debug(f"New node connected from {addr}.")
+            logging.debug("New node connected from %s.", addr)
             with self.lock:
                 self.nodes.append(conn)
             threading.Thread(target=self.handle_connection, args=(conn, addr)).start()
 
-        logging.debug(f"Closing reception handler for Master")
+        logging.debug("Closing reception handler for Master")
 
     def send_to_all(self, message):
         """
@@ -165,11 +166,11 @@ class InterfaceDaemon:
         Args:
             message: Message to send.
         """
-        logging.debug(f"Sending message: {message} to all connected nodes")
+        logging.debug("Sending message: %s to all connected nodes", message)
         with self.lock:
             for node in self.nodes:
                 try:
                     node.sendall(json.dumps(message).encode())
                 except Exception as e:
-                    logging.error(f"Failed to send to node: {e}")
+                    logging.error("Failed to send to node: %s", e)
                     self.nodes.remove(node)

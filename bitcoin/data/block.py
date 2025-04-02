@@ -6,8 +6,8 @@ block.
 import hashlib
 import datetime
 import json
-import bitcoin.data.crypto as crypto
 from dataclasses import asdict, dataclass
+from bitcoin.data import crypto
 
 
 @dataclass
@@ -186,6 +186,7 @@ class PoWBlock:
             str: Formatted block representation.
         """
         border = f"#{''.ljust(81,'-')}#\n"
+
         rep = border + f"|  {f'Blockchain Block {i}'.center(77)}  |\n" + border
 
         # Block Header
@@ -204,41 +205,48 @@ class PoWBlock:
             rep += f"|  {f'Hash: {txid}'.ljust(77)}  |\n"
 
             if t.get("inputs"):
-                rep += f"|  {f' '.ljust(77)}  |\n"
+                rep += f"|  {' '.ljust(77)}  |\n"
                 rep += f"|  {'Inputs'.ljust(77)}  |\n"
-                for i_, i in enumerate(t["inputs"]):
-                    tx_id, vout, key, signature = (
-                        i["tx_id"],
-                        i["v_out"],
-                        i["key"],
-                        i["signature"],
+                for i_, inp in enumerate(t["inputs"]):
+                    rep += "|      " + f"Index: {i_}".ljust(73) + "  |\n"
+                    rep += "|      " + f"TXID: {inp['tx_id']}".ljust(73) + "  |\n"
+                    rep += "|      " + f"VOUT: {inp['v_out']}".ljust(73) + "  |\n"
+                    rep += (
+                        "|      "
+                        + f"Owner:     {inp['key'][0:32]}...".ljust(73)
+                        + "  |\n"
                     )
-                    rep += f"|      {f'Index: {i_}'.ljust(73)}  |\n"
-                    rep += f"|      {f'TXID: {tx_id}'.ljust(73)}  |\n"
-                    rep += f"|      {f'VOUT: {vout}'.ljust(73)}  |\n"
-                    rep += f"|      {f'Owner:     {key[0:32]}...'.ljust(73)}  |\n"
-                    rep += f"|      {f'Signature: {signature[0:32]}...'.ljust(73)}  |\n"
+                    rep += (
+                        "|      "
+                        + f"Signature: {inp['signature'][0:32]}...".ljust(73)
+                        + "  |\n"
+                    )
 
                     if i_ < len(t["inputs"]) - 1:
-                        rep += f"|  {f' '.ljust(77)}  |\n"
+                        rep += f"|  {' '.ljust(77)}  |\n"
 
             if t.get("outputs"):
-                rep += f"|  {f' '.ljust(77)}  |\n"
+                rep += f"|  {' '.ljust(77)}  |\n"
                 rep += f"|  {'Outputs'.ljust(77)}  |\n"
                 for i_, o in enumerate(t["outputs"]):
-                    keyhash, amount, data = o["keyhash"], o.get("amount"), o.get("data")
-                    rep += f"|      {f'Index: {i_}'.ljust(73)}  |\n"
-                    rep += f"|      {f'Owner: {keyhash}'.ljust(73)}  |\n"
+                    rep += "|      " + f"Index: {i_}".ljust(73) + "  |\n"
+                    rep += "|      " + f"Owner: {o['keyhash']}".ljust(73) + "  |\n"
                     rep = (
-                        rep + f"|      {f'BTC: {amount}'.ljust(73)}  |\n"
-                        if amount
+                        rep + "|      " + f"BTC: {o.get('amount')}".ljust(73) + "  |\n"
+                        if o.get("amount")
                         else (
-                            rep + f"|      {f'Data: {data[0:32]}...'.ljust(73)}  |\n"
-                            if len(data) > 32
-                            else rep + f"|      {f'Data: {data}'.ljust(73)}  |\n"
+                            rep
+                            + "|      "
+                            + f"Data: {o['data'][0:32]}...".ljust(73)
+                            + "  |\n"
+                            if len(o["data"]) > 32
+                            else rep
+                            + "|      "
+                            + f"Data: {o['data']}".ljust(73)
+                            + " |\n"
                         )
                     )
-                    rep += f"|  {f' '.ljust(77)}  |\n"
+                    rep += f"|  {' '.ljust(77)}  |\n"
             if val < len(self.transactions) - 1:
                 rep += f"|{''.ljust(81,'~')}|\n"
 

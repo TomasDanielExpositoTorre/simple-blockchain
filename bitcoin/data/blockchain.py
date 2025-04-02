@@ -2,13 +2,10 @@
 This module defines the structure and methods required for a PoW blockchain.
 """
 
-import hashlib
-import datetime
-import json
-from dataclasses import asdict, dataclass, field
-import bitcoin.data.crypto as crypto
-from bitcoin.data.block import PoWBlock
 import logging
+from dataclasses import dataclass, field
+from bitcoin.data import crypto
+from bitcoin.data.block import PoWBlock
 
 GENESIS_HASH = "0000000000000000000000000000000000000000000000000000000000000000"
 
@@ -47,7 +44,7 @@ class Blockchain:
         """
         Returns the hash of the last block in the chain.
         """
-        return self.blocks[-1].hash if len(self.blocks) else GENESIS_HASH
+        return self.blocks[-1].hash if self.blocks else GENESIS_HASH
 
     def get_input(self, txid, v_out):
         """
@@ -61,15 +58,15 @@ class Blockchain:
             int|str
         """
         if not self.utxo_set.get(txid):
-            logging.error(f"Invalid transaction identifier: {txid}")
+            logging.error("Invalid transaction identifier: %s", txid)
             return None
 
         utxo = self.utxo_set[txid]
         if v_out not in utxo.v_outs:
             logging.error(
-                f"Invalid transaction outpoint:\n"
-                + f"got: {v_out}\n"
-                + f"expected: {utxo.v_outs}\n"
+                "Invalid transaction outpoint:\n" + "got: %s\n" + "expected: %s\n",
+                v_out,
+                utxo.v_outs,
             )
             return None
 
@@ -100,7 +97,7 @@ class Blockchain:
         self.blocks.append(block)
 
         hashes = {crypto.hash_transaction(t): i for i, t in enumerate(transactions)}
-        spent = dict()
+        spent = {}
 
         for txid, t in block.transactions.items():
             # Coinbase transaction, not in the pool and has no inputs
@@ -152,38 +149,36 @@ class Blockchain:
 
         if transaction["version"] != 1:
             logging.debug(
-                "Wrong transaction version"
-                + f"\n\texpected: 1"
-                + f"\n\tgot: {transaction['version']}"
+                "Wrong transaction version" + "\n\texpected: 1" + "\n\tgot: %s",
+                transaction["version"],
             )
             return False
 
         for i in transaction.get("inputs"):
 
             # Extract data from the input
-            txid, out = i["tx_id"], i["v_out"]
             pub, sig = crypto.load_pubkey(i["key"]), crypto.load_signature(
                 i["signature"]
             )
-            outpoint = f"{txid}:{out}"
+            outpoint = f"{i['tx_id']}:{i['v_out']}"
 
             # Look up outpoint in unspent set
             if outpoint in inpairs:
-                logging.debug(f"The outpoint {outpoint} was spent twice")
+                logging.debug("The outpoint %s was spent twice", outpoint)
                 return False
             inpairs.append(outpoint)
 
-            utxo = self.utxo_set.get(txid, None)
-            if not utxo or out not in utxo.v_outs:
-                logging.debug(f"The outpoint {outpoint} is invalid")
+            utxo = self.utxo_set.get(i["tx_id"], None)
+            if not utxo or i["v_out"] not in utxo.v_outs:
+                logging.debug("The outpoint %s is invalid", outpoint)
                 return False
 
-            tx: dict = self.blocks[utxo.block_id].transactions[txid]["outputs"][out]
+            tx: dict = self.blocks[utxo.block_id].transactions[i["tx_id"]]["outputs"][i["v_out"]]
 
             # Compare public keys
             keyhash = crypto.hash_pubkey(pub)
             if keyhash != tx["keyhash"]:
-                logging.debug(f"Invalid public key for outpoint {outpoint}")
+                logging.debug("Invalid public key for outpoint %s", outpoint)
                 return False
 
             # Append remainder to total fee
@@ -196,12 +191,12 @@ class Blockchain:
 
             # Compare signature for ownership
             if not crypto.verify(pub=pub, signature=sig, data=d):
-                logging.debug(f"Invalid ownership for outpoint {outpoint}")
+                logging.debug("Invalid ownership for outpoint %s", outpoint)
                 return False
 
         # Check resulting fee and ownership transfer
         total -= sum(
-            [t.get("amount", 0) for t in transaction.get("outputs", [{"amount": 0}])]
+            t.get("amount", 0) for t in transaction.get("outputs", [{"amount": 0}])
         )
         outs = [
             t["data"]
@@ -210,12 +205,12 @@ class Blockchain:
         ]
 
         if total < 0:
-            logging.debug(f"Invalid transaction fee: {total}")
+            logging.debug("Invalid transaction fee: %s", total)
             return False
 
         if len(set(data) - set(outs)) > 0:
             logging.debug(
-                f"Invalid transaction, some input data is not being transfered as outputs"
+                "Invalid transaction, some input data is not being transfered as outputs"
             )
             return False
 
@@ -242,26 +237,28 @@ class Blockchain:
         # Validate block header values
         if block.header.hash_parent != last_hash:
             logging.debug(
-                "Block parent hash is incorrect"
-                + f"\n\texpected:{last_hash}"
-                + f"\n\tgot: {block.header.hash_parent}"
+                "Block parent hash is incorrect" + "\n\texpected:%s" + "\n\tgot: %s",
+                last_hash,
+                block.header.hash_parent,
             )
             return False
 
         if block.header.target != difficulty:
             logging.debug(
                 "Block difficulty value is incorrect"
-                + f"\n\texpected:{difficulty}"
-                + f"\n\tgot: {block.header.target}"
+                + "\n\texpected:%s"
+                + "\n\tgot: %s",
+                difficulty,
+                block.header.target,
             )
             return False
 
         # Validate obtained hash
         if block.target_value < int(block.hash, 16):
             logging.debug(
-                "Block target was not reached"
-                + f"\n\texpected:{block.target_value}"
-                + f"\n\tgot: {int(block.hash, 16)}"
+                "Block target was not reached" + "\n\texpected:%s" + "\n\tgot: %s",
+                block.target_value,
+                int(block.hash, 16),
             )
             return False
 
@@ -269,16 +266,16 @@ class Blockchain:
         for txid, t in block.transactions.items():
             if crypto.hash_transaction(t) != txid:
                 logging.debug(
-                    "Transaction was tampered"
-                    + f"\n\texpected hash:{txid}"
-                    + f"\n\tgot: {crypto.hash_transaction(t)}"
+                    "Transaction was tampered" + "\n\texpected hash:%s" + "\n\tgot: %s",
+                    txid,
+                    crypto.hash_transaction(t),
                 )
                 return False
 
             if t.get("coinbase") and (fee or len(t["outputs"]) != 1):
                 logging.debug("More than one coinbase transaction present in the block")
                 return False
-            elif t.get("coinbase"):
+            if t.get("coinbase"):
                 fee = t["outputs"][0]["amount"]
                 continue
 
@@ -289,13 +286,13 @@ class Blockchain:
 
         if fee != (total + Blockchain.reward):
             logging.debug(
-                "Reward value is incorrect"
-                + f"\n\texpected:{total + Blockchain.reward}"
-                + f"\n\tgot: {fee}"
+                "Reward value is incorrect" + "\n\texpected:%s" + "\n\tgot: %s",
+                total + Blockchain.reward,
+                fee,
             )
             return False
 
-        logging.debug(f"Block {PoWBlock.dumps(block)} is valid!")
+        logging.debug("Block %s is valid!", PoWBlock.dumps(block))
         return True
 
     def validate_chain(self) -> bool:
@@ -307,7 +304,7 @@ class Blockchain:
         """
 
         # An empty chain is always valid
-        if not len(self.blocks):
+        if not self.blocks:
             return True
 
         # Genesis block validation
@@ -329,7 +326,7 @@ class Blockchain:
                 return False
 
             # Store all spent transactions
-            spent = dict()
+            spent = {}
             for t in block.transactions.values():
                 for i in t.get("inputs", []):
                     spent.setdefault(i["tx_id"], []).append(i["v_out"])

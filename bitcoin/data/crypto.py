@@ -3,10 +3,11 @@ Wrapper module for required cryptography operations.
 """
 
 import hashlib
+import json
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
-import json
+from cryptography.exceptions import InvalidSignature
 
 
 def create_keypair() -> tuple:
@@ -158,7 +159,7 @@ def verify(pub: rsa.RSAPublicKey, signature: bytes, data: str):
             algorithm=hashes.SHA256(),
         )
         return True
-    except Exception:
+    except InvalidSignature:
         return False
 
 

@@ -3,15 +3,16 @@ This module defines the structure and methods required for a PoW blockchain
 node.
 """
 
-from bitcoin.data.blockchain import Blockchain
-from bitcoin.data.block import PoWBlock
-from dataclasses import dataclass
-import bitcoin.data.crypto as crypto
 import logging
 import threading
 import socket
 import json
 import datetime
+import sys
+from dataclasses import dataclass
+from bitcoin.data import crypto
+from bitcoin.data.blockchain import Blockchain
+from bitcoin.data.block import PoWBlock
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -70,7 +71,6 @@ class PoWNode:
         self.priv = priv
 
         # Network data
-        self.bufsize = 1024**2
         self.conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         # Threading data
@@ -89,9 +89,8 @@ class PoWNode:
         Return:
             bool: Solution found status.
         """
-        self.lock.acquire()
-        sol = self.solution_found
-        self.lock.release()
+        with self.lock:
+            sol = self.solution_found
         return sol
 
     def set_solution(self, value: bool):
@@ -101,9 +100,8 @@ class PoWNode:
         Args:
             value (bool): Setter value.
         """
-        self.lock.acquire()
-        self.solution_found = value
-        self.lock.release()
+        with self.lock:
+            self.solution_found = value
 
     def send(self, data: dict):
         """
@@ -130,7 +128,7 @@ class PoWNode:
         found = False
 
         # Compute the mining fee and add it as the coinbase transaction
-        fee = sum([t.fee for t in self.pool]) + Blockchain.reward
+        fee = sum(t.fee for t in self.pool) + Blockchain.reward
         self.pool.append(
             Transaction(
                 data={
@@ -158,7 +156,7 @@ class PoWNode:
             if int(block.hash, base=16) <= target:
                 # Send found solution
                 self.send({"type": "solution", "block": PoWBlock.dumps(block)})
-                logging.debug(f"Solution found! {PoWBlock.dumps(block)}")
+                logging.debug("Solution found! %s", PoWBlock.dumps(block))
                 found = True
 
             # Halt mining when another node finds the solution
@@ -172,7 +170,7 @@ class PoWNode:
 
         logging.debug("Solution confirmed, exiting")
         self.pool.pop()
-        exit()
+        sys.exit()
 
     def add_transaction(self, transaction: dict):
         """
@@ -185,7 +183,7 @@ class PoWNode:
         if (fee := self.blockchain.validate_transaction(transaction)) is False:
             return
 
-        logging.debug(f"Adding transaction {transaction} to the block!")
+        logging.debug("Adding transaction %s to the block!", transaction)
 
         self.pool.append(Transaction(data=transaction, fee=fee))
 
@@ -206,21 +204,21 @@ class PoWNode:
         while not disconnected:
 
             # Obtain data from master
-            data = self.conn.recv(self.bufsize)
+            data = self.conn.recv(1024**2)
             message = json.loads(data.decode())
 
             match message.get("type").lower():
                 # Add a transaction to the chain (blocking)
                 case "transaction":
                     logging.debug(
-                        f"Incoming transaction from master: {message['transaction']}"
+                        "Incoming transaction from master: %s", message["transaction"]
                     )
                     self.add_transaction(transaction=message["transaction"])
 
                 # Mine current transactions (non-blocking)
                 case "mine":
                     logging.debug(
-                        f"Beginning mining operation with transactions: {self.pool}"
+                        "Beginning mining operation with transactions: %s", self.pool
                     )
                     self.mining_signal.clear()
                     self.set_solution(False)
@@ -236,13 +234,14 @@ class PoWNode:
                         difficulty=message["difficulty"],
                         last_hash=self.blockchain.last_hash,
                     )
-                    logging.debug(f"Vote on sent solution: {valid}")
+                    logging.debug("Vote on sent solution: %s", valid)
 
                     self.send({"type": "verify", "vote": 1 if valid else 0})
 
                 # Handle consensus response (blocking)
                 case "veredict":
-                    logging.debug(f"Received veredict: {message}")
+                    logging.debug("Received verdict: %s", message)
+
                     # Append block and tell miner to stop
                     if message.get("block"):
                         trs = {
@@ -290,9 +289,8 @@ class PoWNode:
                         new and not old
                     ):
                         logging.debug("New chain is longer, overriding")
-                        self.lock.acquire()
-                        self.blockchain = blockchain
-                        self.lock.release()
+                        with self.lock:
+                            self.blockchain = blockchain
 
                 # Share keys with master
                 case "keys":
@@ -306,19 +304,19 @@ class PoWNode:
 
                 # Close connection and exit gracefully
                 case "close_connection":
-                    logging.debug(f"Master disconnection received")
+                    logging.debug("Master disconnection received")
                     disconnected = True
 
                 case _:
-                    logging.debug(f"Message type not recognized")
+                    logging.debug("Message type not recognized")
 
 
-priv, pub = crypto.create_keypair()
-node = PoWNode(pub, priv)
+privkey, pubkey = crypto.create_keypair()
+node = PoWNode(pubkey, privkey)
 
 try:
     node.run()
 except Exception as e:
-    logging.error(f"Error: {e}")
+    logging.error("Error: %s", e)
 
 node.conn.close()

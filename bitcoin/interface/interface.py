@@ -5,12 +5,13 @@ Main entry script for the application which handles user input.
 import threading
 import math
 import logging
-from bitcoin.interface.daemon import InterfaceDaemon
-from bitcoin.data.block import PoWBlock
-import bitcoin.data.crypto as crypto
 import pydoc
 import os
 import re
+import sys
+from bitcoin.data import crypto
+from bitcoin.data.block import PoWBlock
+from bitcoin.interface.daemon import InterfaceDaemon
 
 
 class Interface(InterfaceDaemon):
@@ -18,11 +19,6 @@ class Interface(InterfaceDaemon):
     CLI Interface class.
     """
 
-    def __init__(self, host="localhost", port=65432, base=2):
-        """
-        Constructor method for this class.
-        """
-        super().__init__(host, port, base)
 
     @property
     def difficulty(self):
@@ -41,9 +37,8 @@ class Interface(InterfaceDaemon):
         """
         Thread-safe wrapper to access the received solution queue.
         """
-        self.lock.acquire()
-        solution_queue = self.solution_queue
-        self.lock.release()
+        with self.lock:
+            solution_queue = self.solution_queue
         return solution_queue
 
     def mine(self):
@@ -51,7 +46,7 @@ class Interface(InterfaceDaemon):
         Callback function to start the block mining process accross all nodes.
         """
         diff = self.difficulty
-        logging.debug(f"Computed difficulty: {diff}")
+        logging.debug("Computed difficulty: %s", diff)
         self.idle.clear()
 
         # Send mining event to all nodes
@@ -76,8 +71,9 @@ class Interface(InterfaceDaemon):
             with self.lock:
                 self.voting_over.clear()
 
-            logging.info(f"Number of nodes in network: {len(self.nodes)}")
-            logging.info(f"Number of accepted votes: {sum(self.consensus)}")
+            logging.info("Number of nodes in network: %s", len(self.nodes))
+            logging.info("Number of accepted votes: %s", sum(self.consensus))
+
 
             # Handle consensus response
             if sum(self.consensus) >= 0.51 * len(self.nodes):  # Block accepted
@@ -87,7 +83,7 @@ class Interface(InterfaceDaemon):
                     self.idle.set()
                     self.voting_started.clear()
                     self.solution_queue = []
-                    self.blockchain.add_block(PoWBlock.loads(solution), dict())
+                    self.blockchain.add_block(PoWBlock.loads(solution), {})
                     self.consensus = []
             elif i + 1 == len(self.solutions):  # Block rejected, continue mining
                 logging.debug("Last solution rejected")
@@ -107,7 +103,7 @@ class Interface(InterfaceDaemon):
         """
         Callback method to visualize the blockchain in a linux less-like interface.
         """
-        if not len(self.blockchain):
+        if not self.blockchain:
             print("Blockchain is currently empty.")
             return
 
@@ -130,7 +126,7 @@ class Interface(InterfaceDaemon):
         with self.lock:
             for node in self.nodes:
                 node.close()
-        exit()
+        sys.exit()
 
     def acquire_keys(self):
         """
@@ -144,13 +140,13 @@ class Interface(InterfaceDaemon):
         Callback method to visualize acquired keys in a linux less-like
         interface.
         """
-        if not len(self.keys):
+        if not self.keys:
             print("No keys acquired yet.")
             return
 
         # TUI text formatting
         border = f"#{''.ljust(81,'-')}#\n"
-        data = border + f"|  {f'Public Key Visualizer'.center(77)}  |\n" + border
+        data = border + f"|  {'Public Key Visualizer'.center(77)}  |\n" + border
 
         for i, pub in enumerate(self.keys.values()):
             data += f"|  {f'Index: {i}'.ljust(77)}  |\n"
@@ -167,9 +163,9 @@ class Interface(InterfaceDaemon):
 
         # Load keypairs to use during transactions
         with self.lock:
-            keys = [(priv, pub) for priv, pub in self.keys.items()]
+            keys = list(self.keys.items())
 
-        if not len(keys):
+        if not keys:
             print("No keys found, cannot create transactions")
             return
 
@@ -179,7 +175,7 @@ class Interface(InterfaceDaemon):
 
         print("\nTransaction Creator")
         print("Available keys")
-        for i, (priv, pub) in enumerate(keys):
+        for i, (_, pub) in enumerate(keys):
             print(f"{i}: {crypto.hash_pubkey(crypto.load_pubkey(pub))}")
 
         while not done:
@@ -196,7 +192,7 @@ class Interface(InterfaceDaemon):
                 # Create an input for the transaction
                 case "input":
                     i = int(input("Select an origin key index: "))
-                    if not (0 <= i < len(keys)):
+                    if not 0 <= i < len(keys):
                         print("Incorrect key index. Try again.")
                         continue
                     key = keys[i]
@@ -222,7 +218,7 @@ class Interface(InterfaceDaemon):
                 # Create an output for the transaction
                 case "output":
                     i = int(input("Select a destination key index: "))
-                    if not (0 <= i < len(keys)):
+                    if not 0 <= i < len(keys):
                         print("Incorrect key index. Try again.")
                         continue
                     key = keys[i]
