@@ -37,9 +37,26 @@ class Blockchain:
         """
         return self.blocks[-1].hash if len(self.blocks) else GENESIS_HASH
 
+    def get_input(self, txid, v_out):
+        if not self.utxo_set.get(txid):
+            logging.error(f"Invalid transaction identifier: {txid}")
+            return None
+
+        utxo = self.utxo_set[txid]
+        if v_out not in utxo.v_outs:
+            logging.error(
+                f"Invalid transaction outpoint:\n"
+                + f"got: {v_out}\n"
+                + f"expected: {utxo.v_outs}\n"
+            )
+            return None
+
+        txo = self.blocks[utxo.block_id].transactions[txid]["outputs"][v_out]
+        return txo.get("amount", txo.get("data"))
+
     def serialize(self) -> list[str]:
         return [PoWBlock.dumps(block) for block in self.blocks]
-        
+
     def add_block(self, block: PoWBlock, transactions: list[dict]):
         """
         Add a block to the chain updating all required fees
@@ -65,14 +82,16 @@ class Blockchain:
             if txid in hashes:
                 transactions.pop(hashes[txid])
 
-        # Remove spent transactions inputs from utxo set
-        for txid, vouts in spent.items():
-            if self.utxo_set.get(txid):
-                self.utxo_set[txid] = list(set(utxo_set[txid]) - set(vouts))
+            # Remove spent transactions inputs from utxo set
+            for txid, vouts in spent.items():
+                if self.utxo_set.get(txid):
+                    self.utxo_set[txid].v_outs = list(set(self.utxo_set[txid].v_outs) - set(vouts))
+                    if len(self.utxo_set[txid].v_outs):
+                        self.utxo_set.pop(txid)
 
         # Add transaction outputs to the uxto set
         for txid, vouts in block.outpoints.items():
-            self.utxo_set[txid] = vouts
+            self.utxo_set[txid] = UTXO(v_outs=vouts, block_id=len(self.blocks)-1)
 
         return transactions
 
@@ -104,11 +123,20 @@ class Blockchain:
             )
             return False
 
+        if not transaction.get("inputs"):
+            logging.debug(
+                "Transaction must have inputs"
+                + f"\n\texpected: 1"
+                + f"\n\tgot: {transaction['version']}"
+            )
+
         for i in transaction["inputs"]:
 
             # Extract data from the input
             txid, out = i["tx_id"], i["v_out"]
-            pub, sig = crypto.load_pubkey(i["key"]), crypto.load_signature(i["signature"])
+            pub, sig = crypto.load_pubkey(i["key"]), crypto.load_signature(
+                i["signature"]
+            )
             outpoint = f"{txid}:{out}"
 
             # Look up output in unspent set
@@ -144,8 +172,8 @@ class Blockchain:
                 return False
 
         # Check resulting fee and p ownership transfer
-        total -= sum([t.get("amount", 0) for t in transaction["outputs"]])
-        outs = [t["data"] for t in transaction["outputs"] if t.get("data")]
+        total -= sum([t.get("amount", 0) for t in transaction.get("outputs", [{"amount": 0}])])
+        outs = [t["data"] for t in transaction.get("outputs", [{"amount": 0}]) if t.get("data")]
 
         if total < 0:
             logging.debug(f"Invalid transaction fee: {total}")
@@ -214,7 +242,7 @@ class Blockchain:
                 fee = t["outputs"][0]["amount"]
                 continue
 
-            if (amount := self.blockchain.validate_transaction(t)) is False:
+            if (amount := self.validate_transaction(t)) is False:
                 return False
 
             total += amount
@@ -245,7 +273,7 @@ class Blockchain:
             last_hash=GENESIS_HASH,
         )
         for txid, vouts in self.blocks[0].outpoints.items():
-            self.utxo_set[txid] = vouts
+            self.utxo_set[txid] = UTXO(v_outs=vouts, block_id=0)
 
         # Individual block validation
         for i, block in enumerate(self.blocks[1:], start=1):
@@ -264,11 +292,14 @@ class Blockchain:
             # Remove spent transactions inputs from utxo set
             for txid, vouts in spent.items():
                 if self.utxo_set.get(txid):
-                    self.utxo_set[txid] = list(set(utxo_set[txid]) - set(vouts))
+                    self.utxo_set[txid].v_outs = list(set(self.utxo_set[txid].v_outs) - set(vouts))
+                    if len(self.utxo_set[txid].v_outs):
+                        self.utxo_set.pop(txid)
 
             # Add transaction outputs to the uxto set
             for txid, vouts in block.outpoints.items():
-                self.utxo_set[txid] = vouts
+                self.utxo_set[txid] = UTXO(v_outs=vouts, block_id=i)
+
 
         logging.info("All blockchain transactions are valid!")
 

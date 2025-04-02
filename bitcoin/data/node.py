@@ -174,7 +174,7 @@ class PoWNode:
 
         logging.debug(f"Adding transaction {transaction} to the block!")
 
-        self.transactions.append(Transaction(data=transaction, fee=fee))
+        self.pool.append(Transaction(data=transaction, fee=fee))
 
     ###########################################################################
     # -                             MAIN PROGRAM                             -#
@@ -202,7 +202,7 @@ class PoWNode:
                     logging.debug(
                         f"Incoming transaction from master: {message['transaction']}"
                     )
-                    self.add_transaction(transaction=json.loads(message["transaction"]))
+                    self.add_transaction(transaction=message["transaction"])
                 # Mine current transactions (non-blocking)
                 case "mine":
                     logging.debug(

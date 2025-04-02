@@ -161,7 +161,6 @@ class PoWBlock:
         return PoWBlock(transactions=transactions, header=header)
 
     def show(self, i: int) -> str:
-        # TODO add transaction representation
         border = f"#{''.ljust(81,'-')}#\n"
         rep = border + f"|  {f'Blockchain Block {i}'.center(77)}  |\n" + border
 
@@ -177,38 +176,45 @@ class PoWBlock:
 
         # Transactions
         rep += border + f"|  {'Transactions'.center(77)}  |\n" + border
-        for txid, t in self.transactions.items():
+        for val, (txid, t) in enumerate(self.transactions.items()):
             rep += f"|  {f'Hash: {txid}'.ljust(77)}  |\n"
 
             if t.get("inputs"):
                 rep += f"|  {f' '.ljust(77)}  |\n"
-                rep += f"|  {'Inputs'.center(77)}  |\n"
-                for i in t["inputs"]:
+                rep += f"|  {'Inputs'.ljust(77)}  |\n"
+                for i_, i in enumerate(t["inputs"]):
                     tx_id, vout, key, signature = (
                         i["tx_id"],
                         i["v_out"],
                         i["key"],
                         i["signature"],
                     )
-                    rep += f"|  {f'TXID: {tx_id}'.ljust(77)}  |\n"
-                    rep += f"|  {f'VOUT: {vout}'.ljust(77)}  |\n"
-                    rep += f"|  {f'Owner: {key}'.ljust(77)}  |\n"
-                    rep += f"|  {f'Signature: {signature}'.ljust(77)}  |\n"
-                    rep += f"|  {f' '.ljust(77)}  |\n"
+                    rep += f"|      {f'Index: {i_}'.ljust(73)}  |\n"
+                    rep += f"|      {f'TXID: {tx_id}'.ljust(73)}  |\n"
+                    rep += f"|      {f'VOUT: {vout}'.ljust(73)}  |\n"
+                    rep += f"|      {f'Owner:     {key[0:32]}...'.ljust(73)}  |\n"
+                    rep += f"|      {f'Signature: {signature[0:32]}...'.ljust(73)}  |\n"
                     
+                    if i_ < len(t["inputs"]) - 1: 
+                        rep += f"|  {f' '.ljust(77)}  |\n"
 
             if t.get("outputs"):
                 rep += f"|  {f' '.ljust(77)}  |\n"
                 rep += f"|  {'Outputs'.ljust(77)}  |\n"
-                for o in t["outputs"]:
+                for i_, o in enumerate(t["outputs"]):
                     keyhash, amount, data = o["keyhash"], o.get("amount"), o.get("data")
+                    rep += f"|      {f'Index: {i_}'.ljust(73)}  |\n"
                     rep += f"|      {f'Owner: {keyhash}'.ljust(73)}  |\n"
                     rep = (
                         rep + f"|      {f'BTC: {amount}'.ljust(73)}  |\n"
                         if amount
+                        else rep + f"|      {f'Data: {data[0:32]}...'.ljust(73)}  |\n" if len(data) > 32
                         else rep + f"|      {f'Data: {data}'.ljust(73)}  |\n"
                     )
                     rep += f"|  {f' '.ljust(77)}  |\n"
+            if val < len(self.transactions) - 1:
+                rep += f"|{''.ljust(81,'~')}|\n"
+        
         rep += border
-                    
+
         return rep

@@ -6,6 +6,8 @@ from bitcoin.data.block import PoWBlock
 import bitcoin.data.crypto as crypto
 import pydoc
 import os
+import re
+
 
 class Interface(InterfaceDaemon):
     def __init__(self, host="localhost", port=65432, base=2):
@@ -57,7 +59,8 @@ class Interface(InterfaceDaemon):
 
             # Wait for voting to conclude
             self.voting_over.wait()
-            self.voting_over.clear()
+            with self.lock:
+                self.voting_over.clear()
 
             logging.info(f"Number of nodes in network: {len(self.nodes)}")
             logging.info(f"Number of accepted votes: {sum(self.consensus)}")
@@ -70,7 +73,8 @@ class Interface(InterfaceDaemon):
                     self.idle.set()
                     self.voting_started.clear()
                     self.solution_queue = []
-                    self.blockchain.blocks.append(PoWBlock.loads(solution))
+                    self.blockchain.add_block(PoWBlock.loads(solution), dict())
+                    self.consensus = []
             elif i + 1 == len(self.solutions):  # Block rejected, continue mining
                 logging.debug("Last solution rejected")
                 self.send_to_all({"type": "veredict", "final": True})
@@ -78,10 +82,12 @@ class Interface(InterfaceDaemon):
                     self.idle.set()
                     self.voting_started.clear()
                     self.solution_queue = []
+                    self.consensus = []
             else:  # Block rejected, but solution queue is not empty
                 logging.debug("Solution rejected!")
                 self.send_to_all({"type": "veredict", "final": False})
-            self.consensus = []
+                with self.lock:
+                    self.consensus = []
 
     def visualize(self):
         if not len(self.blockchain):
@@ -120,7 +126,84 @@ class Interface(InterfaceDaemon):
         pydoc.pager(data)
 
     def transaction_creator(self):
-        pass
+        with self.lock:
+            keys = [(priv, pub) for priv, pub in self.keys.items()]
+
+        if not len(keys):
+            print("No keys found, cannot create transactions")
+            return
+
+        transaction = {"version": 1}
+        done = False
+        key = None
+        print("Transaction Creator")
+        print("Available keys")
+        for i, (priv, pub) in enumerate(keys):
+            print(f"{i}: {crypto.hash_pubkey(crypto.load_pubkey(pub))}")
+
+        while not done:
+            cmd = input("[trc] Enter a command: ").strip().lower()
+
+            match cmd:
+                case "help":
+                    print(
+                        "Available transaction commands:\n\tinput.\n\toutput.\n\tchain.\n\tkeys."
+                    )
+                case "input":
+                    i = int(input("Select an origin key index: "))
+                    if not (0 <= i < len(keys)):
+                        print("Incorrect key index. Try again.")
+                        continue
+                    key = keys[i]
+
+                    txid = input("Enter a transaction id: ").strip().lower()
+                    vout = int(input("Enter an output index: ").strip())
+
+                    if not (data := self.blockchain.get_input(txid, vout)):
+                        print("Invalid input. Try again.")
+                        continue
+
+                    transaction.setdefault("inputs", []).append(
+                        {
+                            "tx_id": txid,
+                            "v_out": vout,
+                            "key": key[1],
+                            "signature": crypto.sign(
+                                priv=crypto.load_privkey(key[0]), data=str(data)
+                            ),
+                        }
+                    )
+                case "output":
+                    i = int(input("Select a destination key index: "))
+                    if not (0 <= i < len(keys)):
+                        print("Incorrect key index. Try again.")
+                        continue
+                    key = keys[i]
+
+                    data = (
+                        input("Enter an amount to transfer or data: ").strip().lower()
+                    )
+                    field = "data"
+                    if re.match(r"^\d+(\.\d+)?$", data):
+                        data = float(data) if "." in data else int(data)
+                        field = "amount"
+
+                    transaction.setdefault("outputs", []).append(
+                        {
+                            field: data,
+                            "keyhash": crypto.hash_pubkey(crypto.load_pubkey(key[1])),
+                        }
+                    )
+
+                case "chain":
+                    self.visualize()
+                case "keys":
+                    self.show_keys()
+                case "done":
+                    done = True
+
+        if transaction.get("inputs") or transaction.get("outputs"):
+            self.send_to_all({"type": "transaction", "transaction": transaction})
 
     def run(self):
         """
@@ -142,7 +225,7 @@ class Interface(InterfaceDaemon):
             "acquire keys": self.acquire_keys,
             "visualize keys": self.show_keys,
             "exit": self.cleanup,
-            "clear": lambda: os.system('cls' if os.name == 'nt' else 'clear')
+            "clear": lambda: os.system("cls" if os.name == "nt" else "clear"),
         }
         commands = "List of available commands:\n\t" + "\n\t".join(k for k in handlers)
 
