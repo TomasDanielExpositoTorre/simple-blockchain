@@ -1,0 +1,32 @@
+#! /usr/bin/env bash
+source venv/bin/activate
+usage() {
+    echo "Usage: $0 -n <number>"
+    exit 1
+}
+
+number=""
+
+while getopts "n:" opt; do
+    case $opt in
+    n)
+        # Check if the input is a valid integer
+        if [[ "$OPTARG" =~ ^[0-9]+$ ]]; then
+            number=$OPTARG
+        else
+            usage
+        fi
+        ;;
+    *)
+        usage
+        ;;
+    esac
+done
+
+if [ -z "$number" ]; then
+    number=1
+fi
+
+for ((i = 0; i < number; i++)); do
+    python3 -m bitcoin.data.node &
+done
