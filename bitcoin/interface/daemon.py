@@ -133,6 +133,8 @@ class InterfaceDaemon:
                         # Handle receiving keypairs from a node
                         case "keys":
                             self.keys[message["priv"]] = message["pub"]
+                        case "logout":
+                            del self.keys[message["priv"]]
                         case _:
                             print("Unsupported message type")
         except Exception as e:

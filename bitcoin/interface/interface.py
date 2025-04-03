@@ -189,14 +189,14 @@ class Interface(InterfaceDaemon):
 
                 # Create an input for the transaction
                 case "input":
-                    i = int(input("Select an origin key index: "))
+                    i = int(input("Select an key index: "))
                     if not 0 <= i < len(keys):
                         print("Incorrect key index. Try again.")
                         continue
                     key = keys[i]
 
                     txid = input("Enter a transaction id: ").strip().lower()
-                    vout = int(input("Enter an output index: ").strip())
+                    vout = int(input("Enter an owner index: ").strip())
 
                     if not (data := self.blockchain.get_input(txid, vout)):
                         print("Invalid input. Try again.")

@@ -9,6 +9,7 @@ import socket
 import json
 import datetime
 import sys
+import signal
 from dataclasses import dataclass
 from bitcoin.data import crypto
 from bitcoin.data.blockchain import Blockchain
@@ -23,6 +24,20 @@ logging.basicConfig(
         ),
     ],
 )
+
+def handle_sigint(signum, frame):
+    try:
+        node.send(
+            {
+                "type": "logout",
+                "priv": crypto.dump_privkey(node.priv)
+            }
+        )
+    except Exception as e:
+        logging.error("Failed send message to master: %s", e)
+    finally:
+        logging.debug("Node disconnected.")
+        sys.exit(0)
 
 
 @dataclass
@@ -199,6 +214,13 @@ class PoWNode:
         disconnected = False
 
         self.conn.connect(("localhost", 65432))
+        self.send(
+            {
+                "type": "keys",
+                "priv": crypto.dump_privkey(self.priv),
+                "pub": crypto.dump_pubkey(self.pub),
+            }
+        )
         logging.info("Connected to master.")
 
         while not disconnected:
@@ -310,7 +332,7 @@ class PoWNode:
                 case _:
                     logging.debug("Message type not recognized")
 
-
+signal.signal(signal.SIGINT, handle_sigint)
 privkey, pubkey = crypto.create_keypair()
 node = PoWNode(pubkey, privkey)
 
