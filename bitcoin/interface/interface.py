@@ -126,13 +126,6 @@ class Interface(InterfaceDaemon):
                 node.close()
         sys.exit()
 
-    def acquire_keys(self):
-        """
-        Callback method to receive keypairs from all connected nodes, to create
-        and test transactions.
-        """
-        self.send_to_all({"type": "keys"})
-
     def show_keys(self):
         """
         Callback method to visualize acquired keys in a linux less-like
@@ -182,13 +175,13 @@ class Interface(InterfaceDaemon):
             match cmd:
 
                 # Print available commands
-                case "help":
+                case 'h' | "help":
                     print(
-                        "Available transaction commands:\n\tinput.\n\toutput.\n\tchain.\n\tkeys.\n\tclear.\n\tdone."
+                        "Available transaction commands:\n\t(i) input\n\t(o) output\n\t(c) chain\n\t(k) keys\n\t(cl)clear\n\t(d) done\n\t(h) help"
                     )
 
                 # Create an input for the transaction
-                case "input":
+                case 'i' | "input":
                     i = int(input("Select an key index: "))
                     if not 0 <= i < len(keys):
                         print("Incorrect key index. Try again.")
@@ -214,7 +207,7 @@ class Interface(InterfaceDaemon):
                     )
 
                 # Create an output for the transaction
-                case "output":
+                case 'o' | "output":
                     i = int(input("Select a destination key index: "))
                     if not 0 <= i < len(keys):
                         print("Incorrect key index. Try again.")
@@ -237,18 +230,24 @@ class Interface(InterfaceDaemon):
                     )
 
                 # Visualize the chain to obtain hashes
-                case "chain":
+                case 'c' | "chain":
                     self.visualize()
 
                 # Visualize all available keys
-                case "keys":
+                case 'k' | "keys":
                     self.show_keys()
 
                 # Clear the screen
-                case "clear":
+                case 'cl' | "clear":
                     os.system("cls" if os.name == "nt" else "clear")
-                case "done":
+    
+                # Exit the transaction menu
+                case 'd' | "done":
                     done = True
+
+                # Other cases
+                case _:
+                    print("Command not recognized, use '(h) help' to view available commands")
 
         if transaction.get("inputs") or transaction.get("outputs"):
             self.send_to_all({"type": "transaction", "transaction": transaction})
@@ -267,22 +266,26 @@ class Interface(InterfaceDaemon):
         self.idle.set()
 
         # Currently supported commands
-        handlers = {
-            "transaction": self.transaction_creator,
-            "mine": self.mine,
-            "visualize chain": self.visualize,
-            "integrity": self.integrity,
-            "acquire keys": self.acquire_keys,
-            "visualize keys": self.show_keys,
-            "exit": self.cleanup,
-            "clear": lambda: os.system("cls" if os.name == "nt" else "clear"),
+        command_map = {
+            self.transaction_creator: ["t", "transaction"],
+            self.mine: ["m", "mine"],
+            self.visualize: ["c", "chain"],
+            self.integrity: ["i", "integrity"],
+            self.show_keys: ["k", "keys"],
+            self.cleanup: ["e", "exit"],
+            lambda: os.system("cls" if os.name == "nt" else "clear"): ["cl", "clear"],
+            lambda: print(help_text): ["h", "help"],
         }
-        handlers["help"] = lambda: print(
-            "List of available commands:\n\t" + "\n\t".join(k for k in handlers)
-        )
+
+        handlers = {
+            alias: func
+                for func, aliases in command_map.items()
+                for alias in aliases
+        }
+
+        help_text = "List of available commands:\n\t" + "\n\t".join(f"({aliases[0]}) {aliases[1]}" for aliases in command_map.values())
 
         print("Simple Blockchain Simulator")
-
         while True:
             handlers.get(
                 input("Enter a command: ").strip().lower(),

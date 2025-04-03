@@ -314,16 +314,6 @@ class PoWNode:
                         with self.lock:
                             self.blockchain = blockchain
 
-                # Share keys with master
-                case "keys":
-                    self.send(
-                        {
-                            "type": "keys",
-                            "priv": crypto.dump_privkey(self.priv),
-                            "pub": crypto.dump_pubkey(self.pub),
-                        }
-                    )
-
                 # Close connection and exit gracefully
                 case "close_connection":
                     logging.debug("Master disconnection received")

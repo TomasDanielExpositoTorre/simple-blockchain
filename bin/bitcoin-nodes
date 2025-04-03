@@ -1,5 +1,4 @@
 #! /usr/bin/env bash
-source venv/bin/activate
 usage() {
     echo "Usage: $0 -n <number>"
     exit 1
