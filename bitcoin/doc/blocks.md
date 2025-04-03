@@ -67,6 +67,8 @@ $target = $`0x000000FFFFFF0000000000000000000000000000000000000000000000000000`
 
 The coefficient can be any number of three bytes, and the hash has to be under (or equal) the computed value. In this application, it is fixed to this value to reduce the problem to a leading number of zeroes instead.
 
+Bitcoin updates this difficulty field once every two weeks, to keep the solution arrival time to around 10 minutes. In our case, this difficulty is automatically adjusted based on the number of nodes (processes) that join the network. The time required to arrive at a solution is significantly under 10 minutes, because let's face it, no one wants to wait 10 minutes to test a command line application.
+
 ---
 
 ## The Transactions
