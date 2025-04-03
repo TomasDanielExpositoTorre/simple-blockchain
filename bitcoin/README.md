@@ -1,9 +1,24 @@
 # Simple Bitcoin
 
-Bitcoin-inspired implementation for a Proof-of-Work consensus algorithm on public blockchains. 
+Bitcoin-inspired implementation for a Proof-of-Work consensus algorithm on public blockchains. For this architecture, communication is not done following the peer-to-peer (P2P) protocol, but instead done through sockets on different processes.
+
+[← Back to Home](../README)
+
+---
 
 ## Table of Contents
+- Implementation
+    - [Blocks](doc/blocks)
+    - [The Blockchain](doc/blockchain)
+    - [Cryptographic Functions](doc/crypto)
+    - [Miner Nodes](doc/nodes)
+    - [Interface](doc/server)
+- [How to Use](#how-to-use)
+    - [Interface](#interface)
+    - [Transaction Creator](#transaction-creator)
+    - [Execution Example](#execution-example)
 
+---
 
 ## How to Use
 
@@ -33,6 +48,9 @@ This second command-line interface is accessed via the *transaction* option in t
 - **outputs.** Adds output data to the transaction, which can be either Satoshis ($10^{-9}$ BTC) or arbitrary data.
 - **chain.** The *visualize chain* command from the main interface.
 - **keys.** The *visualize keys* command from the main interface.
+- **help**. Shows this command suite.
+- **clear**. Clears the screen.
+- **done**. Sends the transaction to all nodes and closes this menu.
 
 Note that, even if you build an incorrect transaction, it will still be sent to the nodes, which will then decide if they want to append it to their existing pool or not. Furthermore, any amount not distributed from your selected inputs will be taken as a mining fee.
 
@@ -85,7 +103,7 @@ Available keys
 <span style="color: #f76587;"># Get the coinbase transaction hash and winner key</span>
 [transaction-creator] Enter a command: <b>chain</b>
 
-<span style="color: #65b6f7;"># Create a first data output</span>
+<span style="color: #65b6f7;"># Get funds from a data input</span>
 [transaction-creator] Enter a command: <b>input</b>
 Select an origin key index: <b>0</b> (the winner)
 Enter a transaction id: <b>&lt;transaction-hash&gt;</b>
@@ -95,7 +113,6 @@ Enter an output index: <b>0</b>
 [transaction-creator] Enter a command: <b>output</b>
 Select a destination key index: <b>0</b>
 Enter an amount to transfer or data: <b>3</b>
-
 
 <span style="color: #65b6f7;"># Create a data output</span>
 [transaction-creator] Enter a command: <b>output</b>
@@ -116,3 +133,8 @@ Enter a command: <b>mine</b>
 <span style="color: #f76587;"># View the resulting chain</span>
 Enter a command: <b>visualize chain</b>
 </code></pre>
+
+
+[↑ Back to Top](#simple-bitcoin)  
+
+[← Back to Home](../README)
