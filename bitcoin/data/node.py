@@ -240,7 +240,7 @@ class PoWNode:
 
                 # Handle consensus response (blocking)
                 case "veredict":
-                    logging.debug("Received verdict: %s", message)
+                    logging.debug("Received veredict: %s", message)
 
                     # Append block and tell miner to stop
                     if message.get("block"):

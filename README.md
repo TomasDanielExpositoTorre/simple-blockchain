@@ -1,6 +1,6 @@
 # Simple Blockchain
 
-An educational repository with simple python implementations and examples of the many modes of operation contained in blockchain.
+This is an educational repository with simple python implementations and CLI examples of the many modes of operation compatible with blockchain techonlogy. 
 
 ## Installation
 
@@ -13,3 +13,8 @@ virtualenv venv
 source venv/bin/activate
 pip3 install -r requirements.txt
 ```
+
+All supported applications can be ran from the helper scripts provided in the `bin` directory.
+
+## Supported Modes of Operation
+- Proof-of-Work: [bitcoin](bitcoin/README.md).

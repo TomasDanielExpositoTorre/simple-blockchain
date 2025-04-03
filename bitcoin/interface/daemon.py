@@ -124,6 +124,12 @@ class InterfaceDaemon:
                                     else self.blockchain
                                 )
 
+                                self.send_to_all_nonblock(
+                                    {
+                                        "type": "chain",
+                                        "blockchain": self.blockchain.serialize(),
+                                    }
+                                )
                         # Handle receiving keypairs from a node
                         case "keys":
                             self.keys[message["priv"]] = message["pub"]
@@ -174,3 +180,12 @@ class InterfaceDaemon:
                 except Exception as e:
                     logging.error("Failed to send to node: %s", e)
                     self.nodes.remove(node)
+
+    def send_to_all_nonblock(self, message):
+        logging.debug("Sending message: %s to all connected nodes", message)
+        for node in self.nodes:
+            try:
+                node.sendall(json.dumps(message).encode())
+            except Exception as e:
+                logging.error("Failed to send to node: %s", e)
+                self.nodes.remove(node)

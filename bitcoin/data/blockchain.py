@@ -105,7 +105,7 @@ class Blockchain:
                 continue
 
             # Store all spent transactions
-            for i in t.get("inputs"):
+            for i in t.get("inputs", []):
                 spent.setdefault(i["tx_id"], []).append(i["v_out"])
 
             # Remove the transaction from the pool
@@ -154,7 +154,7 @@ class Blockchain:
             )
             return False
 
-        for i in transaction.get("inputs"):
+        for i in transaction.get("inputs", []):
 
             # Extract data from the input
             pub, sig = crypto.load_pubkey(i["key"]), crypto.load_signature(

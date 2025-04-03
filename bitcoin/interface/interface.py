@@ -19,7 +19,6 @@ class Interface(InterfaceDaemon):
     CLI Interface class.
     """
 
-
     @property
     def difficulty(self):
         """
@@ -73,7 +72,6 @@ class Interface(InterfaceDaemon):
 
             logging.info("Number of nodes in network: %s", len(self.nodes))
             logging.info("Number of accepted votes: %s", sum(self.consensus))
-
 
             # Handle consensus response
             if sum(self.consensus) >= 0.51 * len(self.nodes):  # Block accepted
@@ -186,7 +184,7 @@ class Interface(InterfaceDaemon):
                 # Print available commands
                 case "help":
                     print(
-                        "Available transaction commands:\n\tinput.\n\toutput.\n\tchain.\n\tkeys."
+                        "Available transaction commands:\n\tinput.\n\toutput.\n\tchain.\n\tkeys.\n\tclear.\n\tdone."
                     )
 
                 # Create an input for the transaction
