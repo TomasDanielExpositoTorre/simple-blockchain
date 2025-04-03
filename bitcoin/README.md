@@ -2,7 +2,7 @@
 
 Bitcoin-inspired implementation for a Proof-of-Work consensus algorithm on public blockchains. For this architecture, communication is not done following the peer-to-peer (P2P) protocol, but instead done through sockets on different processes.
 
-[← Back to Home](../README)
+[← Back to Home](../README.md)
 
 ---
 
@@ -137,4 +137,4 @@ Enter a command: <b>visualize chain</b>
 
 [↑ Back to Top](#simple-bitcoin)  
 
-[← Back to Home](../README)
+[← Back to Home](../README.md)

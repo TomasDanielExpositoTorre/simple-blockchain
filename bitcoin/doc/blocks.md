@@ -2,9 +2,9 @@
 
 In bitcoin, blocks carry out the many transactions inside the blockchain. In very simple terms, a block is composed of a header (which is the focus of the *hashcash* problem), and a series of transactions, which can make for a total of about 2MB worth of data.
 
-[← Back to Bitcoin](../README)  
+[← Back to Bitcoin](../README.md)  
 
-[← Back to Home](../../README)
+[← Back to Home](../../README.md)
 
 ---
 
@@ -120,6 +120,6 @@ The answer is simple: through what is called a [coinbase transaction](https://le
 
 [↑ Back to Top](#blocks)  
 
-[← Back to Bitcoin](../README)  
+[← Back to Bitcoin](../README.md)  
 
-[← Back to Home](../../README)
+[← Back to Home](../../README.md)
