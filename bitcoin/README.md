@@ -8,11 +8,11 @@ Bitcoin-inspired implementation for a Proof-of-Work consensus algorithm on publi
 
 ## Table of Contents
 - Implementation
-    - [Blocks](doc/blocks)
-    - [The Blockchain](doc/blockchain)
-    - [Cryptographic Functions](doc/crypto)
-    - [Miner Nodes](doc/nodes)
-    - [Interface](doc/server)
+    - [Blocks](doc/blocks.md)
+    - [The Blockchain](doc/blockchain.md)
+    - [Cryptographic Functions](doc/crypto.md)
+    - [Miner Nodes](doc/nodes.md)
+    - [Interface](doc/server.md)
 - [How to Use](#how-to-use)
     - [Interface](#interface)
     - [Transaction Creator](#transaction-creator)
