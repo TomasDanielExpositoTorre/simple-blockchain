@@ -351,8 +351,13 @@ class Blockchain:
         Returns a string representation for the chain, composed of all
         existing blocks.
         """
+        # Sort blocks by a specific attribute (e.g., timestamp) and reverse the order
+        sorted_blocks = sorted(self.blocks, key=lambda block: block.header.time, reverse=True)
+
         rep = ""
-        for i, block in enumerate(self.blocks):
-            rep += block.show(i)
+        length = len(sorted_blocks)
+        for i, block in enumerate(sorted_blocks):
+            n = length - i - 1
+            rep += block.show(n)
             rep += "\n\n"
         return rep

@@ -1,3 +1,4 @@
 #! /usr/bin/env bash
+source venv/bin/activate
 bin/clean
 python3 -m bitcoin.interface.interface
