@@ -8,7 +8,7 @@ import datetime
 import json
 from dataclasses import asdict, dataclass
 from bitcoin.data import crypto
-
+from bitcoin.data.constants import SATOSHI
 
 @dataclass
 class BlockHeader:
@@ -232,7 +232,7 @@ class PoWBlock:
                     rep += "|      " + f"Index: {i_}".ljust(73) + "  |\n"
                     rep += "|      " + f"Owner: {o['keyhash']}".ljust(73) + "  |\n"
                     rep = (
-                        rep + "|      " + f"BTC: {o.get('amount')}".ljust(73) + "  |\n"
+                        rep + "|      " + f"BTC: {o.get('amount')/SATOSHI}".ljust(73) + "  |\n"
                         if o.get("amount")
                         else (
                             rep

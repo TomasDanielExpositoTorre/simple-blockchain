@@ -6,9 +6,7 @@ import logging
 from dataclasses import dataclass, field
 from bitcoin.data import crypto
 from bitcoin.data.block import PoWBlock
-
-GENESIS_HASH = "0000000000000000000000000000000000000000000000000000000000000000"
-
+from bitcoin.data.constants import SATOSHI, GENESIS_HASH
 
 @dataclass
 class UTXO:
@@ -31,7 +29,7 @@ class Blockchain:
 
     blocks: list[PoWBlock]
     utxo_set: dict[str, UTXO] = field(default_factory=dict)
-    reward: int = 3.125
+    reward: int = SATOSHI
 
     def __len__(self) -> int:
         """

@@ -225,8 +225,8 @@ class Interface(InterfaceDaemon):
                         input("Enter an amount to transfer or data: ").strip().lower()
                     )
                     field = "data"
-                    if re.match(r"^\d+(\.\d+)?$", data):
-                        data = float(data) if "." in data else int(data)
+                    if re.match(r"^\d+$", data):
+                        data = int(data)
                         field = "amount"
 
                     transaction.setdefault("outputs", []).append(
