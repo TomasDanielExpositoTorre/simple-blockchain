@@ -28,6 +28,29 @@ $ bin/bitcoin-interface
 $ bin/bitcoin-nodes -n <number-of-miners>
 ```
 
+Since bitcoin uses a legacy hashing algorithm, ripemd160, you must change your openssl configuration to enable it:
+```sh
+# In your command line
+$ openssl version -d
+$ cd <your-openssl-dir>
+$ nano openssl.cnf
+
+# Change these lines in openssl.cnf (you can use vim if you know how to exit)
+openssl_conf = openssl_init
+
+[openssl_init]
+providers = provider_sect
+
+[provider_sect]
+default = default_sect
+legacy = legacy_sect
+
+[default_sect]
+activate = 1
+
+[legacy_sect]
+activate = 1
+```
 ### Interface
 The main interface (`bin/bitcoin-interface`) allows you to supply commands through the command line to test the different workflows achievable by the application. The supported commands can be viewed by typing `help`, and they are as follows:
 - **transaction**. This opens the transaction creation helper, the only means of sending transactions to nodes inside the network.
