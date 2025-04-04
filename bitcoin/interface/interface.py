@@ -171,85 +171,89 @@ class Interface(InterfaceDaemon):
             print(f"{i}: {crypto.hash_pubkey(crypto.load_pubkey(pub))}")
 
         while not done:
-            cmd = input("[transaction-creator] Enter a command: ").strip().lower()
+            try:
+                cmd = input("[transaction-creator] Enter a command: ").strip().lower()
 
-            match cmd:
+                match cmd:
 
-                # Print available commands
-                case 'h' | "help":
-                    print(
-                        "Available transaction commands:\n\t(i) input\n\t(o) output\n\t(c) chain\n\t(k) keys\n\t(cl)clear\n\t(d) done\n\t(h) help"
-                    )
+                    # Print available commands
+                    case 'h' | "help":
+                        print(
+                            "Available transaction commands:\n\t(i) input\n\t(o) output\n\t(c) chain\n\t(k) keys\n\t(cl)clear\n\t(d) done\n\t(h) help"
+                        )
 
-                # Create an input for the transaction
-                case 'i' | "input":
-                    i = int(input("Select an key index: "))
-                    if not 0 <= i < len(keys):
-                        print("Incorrect key index. Try again.")
-                        continue
-                    key = keys[i]
+                    # Create an input for the transaction
+                    case 'i' | "input":
+                        i = int(input("Select an key index: "))
+                        if not 0 <= i < len(keys):
+                            print("Incorrect key index. Try again.")
+                            continue
+                        key = keys[i]
 
-                    txid = input("Enter a transaction id: ").strip().lower()
-                    vout = int(input("Enter an output index: ").strip())
+                        txid = input("Enter a transaction id: ").strip().lower()
+                        vout = int(input("Enter an output index: ").strip())
 
-                    if not (data := self.blockchain.get_input(txid, vout)):
-                        print("Invalid input. Try again.")
-                        continue
+                        if not (data := self.blockchain.get_input(txid, vout)):
+                            print("Invalid input. Try again.")
+                            continue
 
-                    transaction.setdefault("inputs", []).append(
-                        {
-                            "tx_id": txid,
-                            "v_out": vout,
-                            "key": key[1],
-                            "signature": crypto.sign(
-                                priv=crypto.load_privkey(key[0]), data=data
-                            ),
-                            "nonce": time.time_ns(),
-                        }
-                    )
+                        transaction.setdefault("inputs", []).append(
+                            {
+                                "tx_id": txid,
+                                "v_out": vout,
+                                "key": key[1],
+                                "signature": crypto.sign(
+                                    priv=crypto.load_privkey(key[0]), data=data
+                                ),
+                                "nonce": time.time_ns(),
+                            }
+                        )
 
-                # Create an output for the transaction
-                case 'o' | "output":
-                    i = int(input("Select a destination key index: "))
-                    if not 0 <= i < len(keys):
-                        print("Incorrect key index. Try again.")
-                        continue
-                    key = keys[i]
+                    # Create an output for the transaction
+                    case 'o' | "output":
+                        i = int(input("Select a destination key index: "))
+                        if not 0 <= i < len(keys):
+                            print("Incorrect key index. Try again.")
+                            continue
+                        key = keys[i]
 
-                    data = (
-                        input("Enter an amount to transfer or data: ").strip().lower()
-                    )
-                    field = "data"
-                    if re.match(r"^\d+$", data):
-                        data = int(data)
-                        field = "amount"
+                        data = (
+                            input("Enter an amount to transfer or data: ").strip().lower()
+                        )
+                        field = "data"
+                        if re.match(r"^\d+$", data):
+                            data = int(data)
+                            field = "amount"
 
-                    transaction.setdefault("outputs", []).append(
-                        {
-                            field: data,
-                            "keyhash": crypto.hash_pubkey(crypto.load_pubkey(key[1])),
-                        }
-                    )
+                        transaction.setdefault("outputs", []).append(
+                            {
+                                field: data,
+                                "keyhash": crypto.hash_pubkey(crypto.load_pubkey(key[1])),
+                            }
+                        )
 
-                # Visualize the chain to obtain hashes
-                case 'c' | "chain":
-                    self.visualize()
+                    # Visualize the chain to obtain hashes
+                    case 'c' | "chain":
+                        self.visualize()
 
-                # Visualize all available keys
-                case 'k' | "keys":
-                    self.show_keys()
+                    # Visualize all available keys
+                    case 'k' | "keys":
+                        self.show_keys()
 
-                # Clear the screen
-                case 'cl' | "clear":
-                    os.system("cls" if os.name == "nt" else "clear")
-    
-                # Exit the transaction menu
-                case 'd' | "done":
-                    done = True
+                    # Clear the screen
+                    case 'cl' | "clear":
+                        os.system("cls" if os.name == "nt" else "clear")
+        
+                    # Exit the transaction menu
+                    case 'd' | "done":
+                        done = True
 
-                # Other cases
-                case _:
-                    print("Command not recognized, use '(h) help' to view available commands")
+                    # Other cases
+                    case _:
+                        print("Command not recognized, use '(h) help' to view available commands")
+            except Exception as e:
+                logging.error("Error: %s", e)
+                print("Something went wrong, please try again.")
 
         if transaction.get("inputs") or transaction.get("outputs"):
             self.send_to_all({"type": "transaction", "transaction": transaction})
@@ -289,12 +293,16 @@ class Interface(InterfaceDaemon):
 
         print("Simple Blockchain Simulator")
         while True:
-            handlers.get(
-                input("Enter a command: ").strip().lower(),
-                lambda: print(
-                    "Command not recognized, use 'help' to view available commands"
-                ),
-            )()
+            try:
+                handlers.get(
+                    input("Enter a command: ").strip().lower(),
+                    lambda: print(
+                        "Command not recognized, use 'help' to view available commands"
+                    ),
+                )()
+            except Exception as e:
+                logging.error("Error: %s", e)
+                print("Something went wrong, please try again.")
 
 
 interface = Interface()
