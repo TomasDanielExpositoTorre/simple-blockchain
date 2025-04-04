@@ -344,6 +344,7 @@ class Blockchain:
                 self.utxo_set[txid] = UTXO(v_outs=vouts, block_id=i)
 
         logging.info("All blockchain transactions are valid!")
+        print("All blockchain transactions are valid!")
 
         return True
 
