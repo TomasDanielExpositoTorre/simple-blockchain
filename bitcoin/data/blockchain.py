@@ -174,6 +174,7 @@ class Blockchain:
             tx: dict = self.blocks[utxo.block_id].transactions[i["tx_id"]]["outputs"][i["v_out"]]
 
             # Compare public keys
+            # TODO: duda, por que pub es del input
             keyhash = crypto.hash_pubkey(pub)
             if keyhash != tx["keyhash"]:
                 logging.debug("Invalid public key for outpoint %s", outpoint)

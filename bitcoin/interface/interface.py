@@ -9,6 +9,7 @@ import pydoc
 import os
 import re
 import sys
+import time
 from bitcoin.data import crypto
 from bitcoin.data.block import PoWBlock
 from bitcoin.interface.daemon import InterfaceDaemon
@@ -189,7 +190,7 @@ class Interface(InterfaceDaemon):
                     key = keys[i]
 
                     txid = input("Enter a transaction id: ").strip().lower()
-                    vout = int(input("Enter an owner index: ").strip())
+                    vout = int(input("Enter an output index: ").strip())
 
                     if not (data := self.blockchain.get_input(txid, vout)):
                         print("Invalid input. Try again.")
@@ -203,6 +204,7 @@ class Interface(InterfaceDaemon):
                             "signature": crypto.sign(
                                 priv=crypto.load_privkey(key[0]), data=data
                             ),
+                            "nonce": time.time_ns(),
                         }
                     )
 

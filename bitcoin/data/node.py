@@ -10,6 +10,7 @@ import json
 import datetime
 import sys
 import signal
+import time
 from dataclasses import dataclass
 from bitcoin.data import crypto
 from bitcoin.data.blockchain import Blockchain
@@ -151,6 +152,7 @@ class PoWNode:
                         {"amount": fee, "keyhash": crypto.hash_pubkey(self.pub)}
                     ],
                     "coinbase": True,
+                    "nonce": time.time_ns(),
                 },
                 fee=0,
             )
