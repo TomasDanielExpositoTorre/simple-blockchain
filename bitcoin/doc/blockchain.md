@@ -23,7 +23,7 @@ In blockchain, there are three key elements that need to be valid at all times: 
 
 ### Validating a Transaction
 
-As mentioned [before](blocks.md/#the-transactions), transactions are composed of inputs and outputs from which bitcoin is moved around. One cannot assume that all information sent by an account is valid, as the idea of using another account's bitcoin is a very tempting concept.  
+As mentioned [before](blocks.md#the-transactions), transactions are composed of inputs and outputs from which bitcoin is moved around. One cannot assume that all information sent by an account is valid, as the idea of using another account's bitcoin is a very tempting concept.  
 
 Therefore, validating transaction inputs should take a number of factors into account:
 - All input information must be valid.

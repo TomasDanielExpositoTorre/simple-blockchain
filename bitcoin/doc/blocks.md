@@ -43,7 +43,7 @@ The simplified **BlockHeader** dataclass contains the following fields:
 **Merkle Root** | str | Changed the byte representation to string, using twice as much storage (one digit per nibble).
 **Time** | int | No changes from the original
 **Target** | str | Changed the byte representation to string, using twice as much storage (one digit per nibble).
-**Nonce** | int | In bitcoin, this value can only generate up to [$2^{32}$ hashes per block](https://learnmeabitcoin.com/technical/block/#nonce), after which the timestamp value must be recomputed, or the transaction order in the merkle tree shuffled. In this 
+**Nonce** | int | In bitcoin, this value can only generate up to [$2^{32}$ hashes per block](https://learnmeabitcoin.com/technical/block#nonce), after which the timestamp value must be recomputed, or the transaction order in the merkle tree shuffled. In this 
 
 To hash this header, the string representation of all fields are concatenated, and then hashed by using a double-SHA256 algorithm.
 
