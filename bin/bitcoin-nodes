@@ -1,18 +1,27 @@
 #! /usr/bin/env bash
-source venv/bin/activate
+
 usage() {
-    echo "Usage: $0 -n <number>"
+    echo "Usage: $0 -n <number> -m <number>"
     exit 1
 }
 
-number=""
+sincere_number=""
+liar_number=""
 
-while getopts "n:" opt; do
+while getopts "n:m:" opt; do
     case $opt in
-    n)
+    m)
         # Check if the input is a valid integer
         if [[ "$OPTARG" =~ ^[0-9]+$ ]]; then
             number=$OPTARG
+        else
+            usage
+        fi
+        ;;
+    n)
+        # Check if the input is a valid integer
+        if [[ "$OPTARG" =~ ^[0-9]+$ ]]; then
+            liar_number=$OPTARG
         else
             usage
         fi
@@ -23,10 +32,22 @@ while getopts "n:" opt; do
     esac
 done
 
-if [ -z "$number" ]; then
-    number=1
+# Set default values if arguments are not provided
+if [ -z "$sincere_number" ]; then
+    sincere_number=1
 fi
 
-for ((i = 0; i < number; i++)); do
+if [ -z "$liar_number" ]; then
+    liar_number=0
+fi
+
+echo "Number of sincere nodes: $sincere_number"
+echo "Numebr of liar nodes: $liar_number"
+
+for ((i = 0; i < sincere_number; i++)); do
     python3 -m bitcoin.data.node &
+done
+
+for ((i = 0; i < liar_number; i++)); do
+    python3 -m bitcoin.data.nodeLiaer &
 done

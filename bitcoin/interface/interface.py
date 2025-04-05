@@ -45,58 +45,67 @@ class Interface(InterfaceDaemon):
         """
         Callback function to start the block mining process accross all nodes.
         """
+        if len(self.nodes) == 0:
+            print("No nodes available to mine.")
+            return
+
         diff = self.difficulty
         logging.debug("Computed difficulty: %s", diff)
         self.idle.clear()
+        self.solution_queue = []
 
         # Send mining event to all nodes
         self.send_to_all({"type": "mine", "difficulty": diff})
 
         # Wait for the first solution to arrive
-        self.voting_started.wait()
-        logging.debug("Solution found! Starting vote...")
+        finded = False
+        while not finded:
+            print("Waiting for a solution...")
+            self.voting_started.wait()
+            logging.debug("Solution found! Starting vote...")
 
-        for i, solution in enumerate(self.solutions):
-            # Send received solution
-            self.send_to_all(
-                {
-                    "type": "verify",
-                    "block": solution,
-                    "difficulty": diff,
-                }
-            )
+            for i, solution in enumerate(self.solutions):
+                # Send received solution
+                self.send_to_all(
+                    {
+                        "type": "verify",
+                        "block": solution,
+                        "difficulty": diff,
+                    }
+                )
 
-            # Wait for voting to conclude
-            self.voting_over.wait()
-            with self.lock:
-                self.voting_over.clear()
-
-            logging.info("Number of nodes in network: %s", len(self.nodes))
-            logging.info("Number of accepted votes: %s", sum(self.consensus))
-
-            # Handle consensus response
-            if sum(self.consensus) >= 0.51 * len(self.nodes):  # Block accepted
-                logging.debug("Solution accepted!")
-                self.send_to_all({"type": "veredict", "block": solution})
+                # Wait for voting to conclude
+                self.voting_over.wait()
                 with self.lock:
-                    self.idle.set()
-                    self.voting_started.clear()
-                    self.solution_queue = []
-                    self.blockchain.add_block(PoWBlock.loads(solution), {})
-                    self.consensus = []
-            elif i + 1 == len(self.solutions):  # Block rejected, continue mining
-                logging.debug("Last solution rejected")
-                self.send_to_all({"type": "veredict", "final": True})
-                with self.lock:
-                    self.idle.set()
-                    self.voting_started.clear()
-                    self.solution_queue = []
-                    self.consensus = []
-            else:  # Block rejected, but solution queue is not empty
-                logging.debug("Solution rejected!")
-                self.send_to_all({"type": "veredict", "final": False})
-                with self.lock:
-                    self.consensus = []
+                    self.voting_over.clear()
+
+                logging.info("Number of nodes in network: %s", len(self.nodes))
+                logging.info("Number of accepted votes: %s", sum(self.consensus))
+
+                # Handle consensus response
+                if sum(self.consensus) >= 0.51 * len(self.nodes):  # Block accepted
+                    finded = True
+                    logging.debug("Solution accepted!")
+                    self.send_to_all({"type": "veredict", "block": solution})
+                    with self.lock:
+                        self.idle.set()
+                        self.voting_started.clear()
+                        self.solution_queue = []
+                        self.blockchain.add_block(PoWBlock.loads(solution), {})
+                        self.consensus = []
+                elif i + 1 == len(self.solutions):  # Block rejected, continue mining
+                    logging.debug("Last solution rejected")
+                    self.send_to_all({"type": "veredict", "final": True})
+                    with self.lock:
+                        self.idle.set()
+                        self.voting_started.clear()
+                        self.solution_queue = []
+                        self.consensus = []
+                else:  # Block rejected, but solution queue is not empty
+                    logging.debug("Solution rejected!")
+                    self.send_to_all({"type": "veredict", "final": False})
+                    with self.lock:
+                        self.consensus = []
 
     def visualize(self):
         """

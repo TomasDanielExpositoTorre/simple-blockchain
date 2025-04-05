@@ -168,7 +168,6 @@ class PoWNode:
 
         # Apply the Proof-of-Work
         while not found:
-
             # Hashcash
             if int(block.hash, base=16) <= target:
                 # Send found solution
@@ -203,6 +202,23 @@ class PoWNode:
         logging.debug("Adding transaction %s to the block!", transaction)
 
         self.pool.append(Transaction(data=transaction, fee=fee))
+    
+    def validate_block(self, message):
+        """
+        Valide the block and send back the validation.
+
+        Args:
+            message (dict): Message with block info.
+        """
+        self.set_solution(True)
+        valid = self.blockchain.validate_block(
+            block=PoWBlock.loads(message["block"]),
+            difficulty=message["difficulty"],
+            last_hash=self.blockchain.last_hash,
+        )
+        logging.debug("Vote on sent solution: %s", valid)
+
+        self.send({"type": "verify", "vote": 1 if valid else 0})
 
     ###########################################################################
     # -                             MAIN PROGRAM                             -#
@@ -252,15 +268,7 @@ class PoWNode:
 
                 # Vote on solution (blocking)
                 case "verify":
-                    self.set_solution(True)
-                    valid = self.blockchain.validate_block(
-                        block=PoWBlock.loads(message["block"]),
-                        difficulty=message["difficulty"],
-                        last_hash=self.blockchain.last_hash,
-                    )
-                    logging.debug("Vote on sent solution: %s", valid)
-
-                    self.send({"type": "verify", "vote": 1 if valid else 0})
+                    self.validate_block(message)
 
                 # Handle consensus response (blocking)
                 case "veredict":
@@ -324,13 +332,14 @@ class PoWNode:
                 case _:
                     logging.debug("Message type not recognized")
 
-signal.signal(signal.SIGINT, handle_sigint)
-privkey, pubkey = crypto.create_keypair()
-node = PoWNode(pubkey, privkey)
+if __name__ == "__main__":
+    signal.signal(signal.SIGINT, handle_sigint)
+    privkey, pubkey = crypto.create_keypair()
+    node = PoWNode(pubkey, privkey)
 
-try:
-    node.run()
-except Exception as e:
-    logging.error("Error: %s", e)
+    try:
+        node.run()
+    except Exception as e:
+        logging.error("Error: %s", e)
 
-node.conn.close()
+    node.conn.close()
