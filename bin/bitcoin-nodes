@@ -13,7 +13,7 @@ while getopts "n:m:" opt; do
     m)
         # Check if the input is a valid integer
         if [[ "$OPTARG" =~ ^[0-9]+$ ]]; then
-            number=$OPTARG
+            sincere_number=$OPTARG
         else
             usage
         fi

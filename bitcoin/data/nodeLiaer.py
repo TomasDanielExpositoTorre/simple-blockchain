@@ -9,6 +9,7 @@ import logging
 import signal
 import sys
 import time
+import memcache
 from bitcoin.data import crypto
 from bitcoin.data.block import PoWBlock
 from bitcoin.data.blockchain import Blockchain
@@ -39,7 +40,12 @@ def handle_sigint(signum, frame):
         sys.exit(0)
 
 class PoWLiaerNode(PoWNode):
-    is_my_solution = False
+    shared = memcache.Client(['127.0.0.1:11211'], debug=0)
+
+    def __init__(self, pub, priv):
+        super().__init__(pub, priv)
+        if not self.shared.get('liar'):
+            self.shared.set('liar', False)
 
     def mine_block(self, difficulty: str):
         """
@@ -51,7 +57,7 @@ class PoWLiaerNode(PoWNode):
         """
         found = False
         with self.lock:
-            self.is_my_solution = False
+            self.shared.set('liar', False)
 
         # Compute the mining fee and add it as the coinbase transaction
         fee = sum(t.fee for t in self.pool) + Blockchain.reward
@@ -95,14 +101,14 @@ class PoWLiaerNode(PoWNode):
             block.header.nonce += 1
 
         with self.lock:
-            self.is_my_solution = True
+            self.shared.set('liar', True)
         logging.debug("Solution confirmed, exiting")
         self.pool.pop()
         sys.exit()
 
-    def validate_block(self, message):
-        logging.debug("Vote on sent solution: %s", self.is_my_solution)
-        self.send({"type": "verify", "vote": self.is_my_solution })
+    def validate_block(self, _):
+        logging.debug("Vote on sent solution: %s", self.shared.get('liar'))
+        self.send({"type": "verify", "vote": self.shared.get('liar')})
     
 
 if __name__ == "__main__":
