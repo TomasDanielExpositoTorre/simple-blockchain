@@ -26,18 +26,8 @@ logging.basicConfig(
 )
 
 def handle_sigint(signum, frame):
-    try:
-        node.send(
-            {
-                "type": "logout",
-                "priv": crypto.dump_privkey(node.priv)
-            }
-        )
-    except Exception as e:
-        logging.error("Failed send message to master: %s", e)
-    finally:
-        logging.debug("Node disconnected.")
-        sys.exit(0)
+    logging.debug("Node disconnected.")
+    sys.exit(0)
 
 class PoWLiaerNode(PoWNode):
     shared = memcache.Client(['127.0.0.1:11211'], debug=0)
