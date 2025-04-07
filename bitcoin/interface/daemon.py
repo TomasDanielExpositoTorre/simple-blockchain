@@ -91,6 +91,9 @@ class InterfaceDaemon:
 
                         # Handle received solutions before a vote is opened
                         case "solution":
+                            if self.idle.is_set() or self.voting_started.is_set():
+                                continue
+
                             # Get the solution
                             self.solution_queue.append(message["block"])
                             self.voting_started.set()
