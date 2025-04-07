@@ -29,7 +29,7 @@ class Blockchain:
 
     blocks: list[PoWBlock]
     utxo_set: dict[str, UTXO] = field(default_factory=dict)
-    reward: int = SATOSHI
+    reward: float = 3.125 * SATOSHI
 
     def __len__(self) -> int:
         """
