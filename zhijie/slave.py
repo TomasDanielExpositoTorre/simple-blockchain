@@ -56,8 +56,9 @@ class SlaveNode:
                     self.conn.sendall(json.dumps(message).encode())
                 except Exception as e:
                     logging.error(f"Failed to send nonce: {e}")
-                self.stop_event.set()
-                return
+                break
+        while not self.stop_event.is_set():
+            time.sleep(0.1)
 
     def handle_messages(self):
         while True:
@@ -70,7 +71,7 @@ class SlaveNode:
                 except json.JSONDecodeError:
                     logging.warning("Received invalid JSON data.")
                     continue
-
+                print(message)
                 if message['type'] == 'credentials':
                     if self.current_job and self.current_job.is_alive():
                         logging.debug("Stopping current job to start a new one.")

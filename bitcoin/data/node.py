@@ -9,6 +9,8 @@ import socket
 import json
 import datetime
 import sys
+import signal
+import time
 from dataclasses import dataclass
 from bitcoin.data import crypto
 from bitcoin.data.blockchain import Blockchain
@@ -23,6 +25,11 @@ logging.basicConfig(
         ),
     ],
 )
+
+
+def handle_sigint(signum, frame):
+    logging.debug("Node disconnected.")
+    sys.exit(0)
 
 
 @dataclass
@@ -136,6 +143,7 @@ class PoWNode:
                         {"amount": fee, "keyhash": crypto.hash_pubkey(self.pub)}
                     ],
                     "coinbase": True,
+                    "nonce": time.time_ns(),
                 },
                 fee=0,
             )
@@ -151,7 +159,6 @@ class PoWNode:
 
         # Apply the Proof-of-Work
         while not found:
-
             # Hashcash
             if int(block.hash, base=16) <= target:
                 # Send found solution
@@ -187,6 +194,23 @@ class PoWNode:
 
         self.pool.append(Transaction(data=transaction, fee=fee))
 
+    def validate_block(self, message):
+        """
+        Valide the block and send back the validation.
+
+        Args:
+            message (dict): Message with block info.
+        """
+        self.set_solution(True)
+        valid = self.blockchain.validate_block(
+            block=PoWBlock.loads(message["block"]),
+            difficulty=message["difficulty"],
+            last_hash=self.blockchain.last_hash,
+        )
+        logging.debug("Vote on sent solution: %s", valid)
+
+        self.send({"type": "verify", "vote": 1 if valid else 0})
+
     ###########################################################################
     # -                             MAIN PROGRAM                             -#
     ###########################################################################
@@ -199,6 +223,13 @@ class PoWNode:
         disconnected = False
 
         self.conn.connect(("localhost", 65432))
+        self.send(
+            {
+                "type": "keys",
+                "priv": crypto.dump_privkey(self.priv),
+                "pub": crypto.dump_pubkey(self.pub),
+            }
+        )
         logging.info("Connected to master.")
 
         while not disconnected:
@@ -228,15 +259,7 @@ class PoWNode:
 
                 # Vote on solution (blocking)
                 case "verify":
-                    self.set_solution(True)
-                    valid = self.blockchain.validate_block(
-                        block=PoWBlock.loads(message["block"]),
-                        difficulty=message["difficulty"],
-                        last_hash=self.blockchain.last_hash,
-                    )
-                    logging.debug("Vote on sent solution: %s", valid)
-
-                    self.send({"type": "verify", "vote": 1 if valid else 0})
+                    self.validate_block(message)
 
                 # Handle consensus response (blocking)
                 case "veredict":
@@ -292,16 +315,6 @@ class PoWNode:
                         with self.lock:
                             self.blockchain = blockchain
 
-                # Share keys with master
-                case "keys":
-                    self.send(
-                        {
-                            "type": "keys",
-                            "priv": crypto.dump_privkey(self.priv),
-                            "pub": crypto.dump_pubkey(self.pub),
-                        }
-                    )
-
                 # Close connection and exit gracefully
                 case "close_connection":
                     logging.debug("Master disconnection received")
@@ -311,12 +324,14 @@ class PoWNode:
                     logging.debug("Message type not recognized")
 
 
-privkey, pubkey = crypto.create_keypair()
-node = PoWNode(pubkey, privkey)
+if __name__ == "__main__":
+    signal.signal(signal.SIGINT, handle_sigint)
+    privkey, pubkey = crypto.create_keypair()
+    node = PoWNode(pubkey, privkey)
 
-try:
-    node.run()
-except Exception as e:
-    logging.error("Error: %s", e)
+    try:
+        node.run()
+    except Exception as e:
+        logging.error("Error: %s", e)
 
-node.conn.close()
+    node.conn.close()

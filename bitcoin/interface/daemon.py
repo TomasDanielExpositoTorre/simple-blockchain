@@ -94,7 +94,7 @@ class InterfaceDaemon:
                             if self.idle.is_set() or self.voting_started.is_set():
                                 continue
 
-                            # Start voting
+                            # Get the solution
                             self.solution_queue.append(message["block"])
                             self.voting_started.set()
 
@@ -133,6 +133,8 @@ class InterfaceDaemon:
                         # Handle receiving keypairs from a node
                         case "keys":
                             self.keys[message["priv"]] = message["pub"]
+                        case "logout":
+                            del self.keys[message["priv"]]
                         case _:
                             print("Unsupported message type")
         except Exception as e:

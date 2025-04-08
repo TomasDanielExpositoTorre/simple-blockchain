@@ -6,9 +6,7 @@ import logging
 from dataclasses import dataclass, field
 from bitcoin.data import crypto
 from bitcoin.data.block import PoWBlock
-
-GENESIS_HASH = "0000000000000000000000000000000000000000000000000000000000000000"
-
+from bitcoin.data.constants import SATOSHIS_IN_BITCOIN, GENESIS_HASH
 
 @dataclass
 class UTXO:
@@ -31,7 +29,7 @@ class Blockchain:
 
     blocks: list[PoWBlock]
     utxo_set: dict[str, UTXO] = field(default_factory=dict)
-    reward: int = 3.125
+    reward: float = 3.125 * SATOSHIS_IN_BITCOIN
 
     def __len__(self) -> int:
         """
@@ -353,8 +351,13 @@ class Blockchain:
         Returns a string representation for the chain, composed of all
         existing blocks.
         """
+        # Sort blocks by a specific attribute (e.g., timestamp) and reverse the order
+        sorted_blocks = sorted(self.blocks, key=lambda block: block.header.time, reverse=True)
+
         rep = ""
-        for i, block in enumerate(self.blocks):
-            rep += block.show(i)
+        length = len(sorted_blocks)
+        for i, block in enumerate(sorted_blocks):
+            n = length - i - 1
+            rep += block.show(n)
             rep += "\n\n"
         return rep

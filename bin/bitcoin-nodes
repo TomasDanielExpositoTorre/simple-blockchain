@@ -1,18 +1,29 @@
 #! /usr/bin/env bash
+
 source venv/bin/activate
+
 usage() {
-    echo "Usage: $0 -n <number>"
+    echo "Usage: $0 [-h <honest-nodes>] [-s <selfish-nodes>]"
     exit 1
 }
 
-number=""
+sincere_number=""
+liar_number=""
 
-while getopts "n:" opt; do
+while getopts "h:s:" opt; do
     case $opt in
-    n)
+    h)
         # Check if the input is a valid integer
         if [[ "$OPTARG" =~ ^[0-9]+$ ]]; then
-            number=$OPTARG
+            honest=$OPTARG
+        else
+            usage
+        fi
+        ;;
+    s)
+        # Check if the input is a valid integer
+        if [[ "$OPTARG" =~ ^[0-9]+$ ]]; then
+            selfish=$OPTARG
         else
             usage
         fi
@@ -23,10 +34,22 @@ while getopts "n:" opt; do
     esac
 done
 
-if [ -z "$number" ]; then
-    number=1
+# Set default values if arguments are not provided
+if [[ -z "$honest" && -z "$selfish" ]]; then
+    honest=1
 fi
 
-for ((i = 0; i < number; i++)); do
+if [ -z "$selfish" ]; then
+    selfish=0
+fi
+
+echo "Number of honest nodes: $honest"
+echo "Numebr of selfish nodes: $selfish"
+
+for ((i = 0; i < honest; i++)); do
     python3 -m bitcoin.data.node &
+done
+
+for ((i = 0; i < selfish; i++)); do
+    python3 -m bitcoin.data.selfish_node &
 done
