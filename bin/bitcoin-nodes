@@ -1,27 +1,29 @@
 #! /usr/bin/env bash
 
+source venv/bin/activate
+
 usage() {
-    echo "Usage: $0 -n <number> -m <number>"
+    echo "Usage: $0 [-h <honest-nodes>] [-s <selfish-nodes>]"
     exit 1
 }
 
 sincere_number=""
 liar_number=""
 
-while getopts "n:m:" opt; do
+while getopts "h:s:" opt; do
     case $opt in
-    m)
+    h)
         # Check if the input is a valid integer
         if [[ "$OPTARG" =~ ^[0-9]+$ ]]; then
-            sincere_number=$OPTARG
+            honest=$OPTARG
         else
             usage
         fi
         ;;
-    n)
+    s)
         # Check if the input is a valid integer
         if [[ "$OPTARG" =~ ^[0-9]+$ ]]; then
-            liar_number=$OPTARG
+            selfish=$OPTARG
         else
             usage
         fi
@@ -33,21 +35,21 @@ while getopts "n:m:" opt; do
 done
 
 # Set default values if arguments are not provided
-if [ -z "$sincere_number" ]; then
-    sincere_number=1
+if [[ -z "$honest" && -z "$selfish" ]]; then
+    honest=1
 fi
 
-if [ -z "$liar_number" ]; then
-    liar_number=0
+if [ -z "$selfish" ]; then
+    selfish=0
 fi
 
-echo "Number of sincere nodes: $sincere_number"
-echo "Numebr of liar nodes: $liar_number"
+echo "Number of honest nodes: $honest"
+echo "Numebr of selfish nodes: $selfish"
 
-for ((i = 0; i < sincere_number; i++)); do
+for ((i = 0; i < honest; i++)); do
     python3 -m bitcoin.data.node &
 done
 
-for ((i = 0; i < liar_number; i++)); do
-    python3 -m bitcoin.data.nodeLiaer &
+for ((i = 0; i < selfish; i++)); do
+    python3 -m bitcoin.data.selfish_node &
 done

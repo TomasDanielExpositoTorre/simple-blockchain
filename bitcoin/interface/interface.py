@@ -81,7 +81,6 @@ class Interface(InterfaceDaemon):
 
             # Handle consensus response
             if sum(self.consensus) >= 0.51 * len(self.nodes):  # Block accepted
-                finded = True
                 logging.debug("Solution accepted!")
                 self.send_to_all({"type": "veredict", "block": solution})
                 with self.lock:

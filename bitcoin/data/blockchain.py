@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass, field
 from bitcoin.data import crypto
 from bitcoin.data.block import PoWBlock
-from bitcoin.data.constants import SATOSHI, GENESIS_HASH
+from bitcoin.data.constants import SATOSHIS_IN_BITCOIN, GENESIS_HASH
 
 @dataclass
 class UTXO:
@@ -29,7 +29,7 @@ class Blockchain:
 
     blocks: list[PoWBlock]
     utxo_set: dict[str, UTXO] = field(default_factory=dict)
-    reward: float = 3.125 * SATOSHI
+    reward: float = 3.125 * SATOSHIS_IN_BITCOIN
 
     def __len__(self) -> int:
         """
@@ -343,7 +343,6 @@ class Blockchain:
                 self.utxo_set[txid] = UTXO(v_outs=vouts, block_id=i)
 
         logging.info("All blockchain transactions are valid!")
-        print("All blockchain transactions are valid!")
 
         return True
 

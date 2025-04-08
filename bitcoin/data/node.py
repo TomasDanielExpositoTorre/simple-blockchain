@@ -26,6 +26,7 @@ logging.basicConfig(
     ],
 )
 
+
 def handle_sigint(signum, frame):
     logging.debug("Node disconnected.")
     sys.exit(0)
@@ -192,7 +193,7 @@ class PoWNode:
         logging.debug("Adding transaction %s to the block!", transaction)
 
         self.pool.append(Transaction(data=transaction, fee=fee))
-    
+
     def validate_block(self, message):
         """
         Valide the block and send back the validation.
@@ -321,6 +322,7 @@ class PoWNode:
 
                 case _:
                     logging.debug("Message type not recognized")
+
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, handle_sigint)
